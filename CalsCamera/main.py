@@ -30,9 +30,11 @@ l_green.off() #green heartbeat
 #get white balance. You have two seconds.
 t_start = time.ticks()
 t_elapsed = 0
-while(t_elapsed < 4000):
+while(t_elapsed < 200):
     img = sensor.snapshot()
     t_elapsed = time.ticks() - t_start
+
+    print(img.compressed_for_ide(quality = 10))
 
 
 img = sensor.snapshot()         # Take a picture and return the image.
@@ -55,13 +57,15 @@ B = -127 is blue and 128 is yellow.
 img_hist = img.get_histogram()
 img_stats = img_hist.get_statistics()
 
-stage_one_thresholds = [(0, 100, -127, img_stats.a_mode() - 12, img_stats.b_mode() + 12, 60)]
+stage_one_thresholds = [(0, 100, -127, img_stats.a_mode() - 2, img_stats.b_mode() + 2, 60)]
 
-for blob_index, stage_one_blob in enumerate(img.find_blobs(stage_one_thresholds, pixels_threshold=100, area_threshold=100, merge = True)):
+for blob_index, stage_one_blob in enumerate(img.find_blobs(stage_one_thresholds, pixels_threshold=100, area_threshold=100, merge = True, margin = 15)):
     blob_hist = img.get_histogram(roi = (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3]))
     blob_stats = blob_hist.get_statistics()
 
-    if (abs(blob_stats.a_mean() - blob_stats.b_mean()) > 20) & (blob_stats.a_max() - blob_stats.a_min() > 20) & (blob_stats.b_max() - blob_stats.b_min() > 20): #if the a and b histograms are close together it means the color is probably white and should be discarded
+    print(stage_one_blob)
+
+    if (abs(blob_stats.a_mean() - blob_stats.b_mean()) > 10) & (blob_stats.a_max() - blob_stats.a_min() > 20) & (blob_stats.b_max() - blob_stats.b_min() > 20): #if the a and b histograms are close together it means the color is probably white and should be discarded
 
         img.draw_rectangle(stage_one_blob.rect(), color = 120)
 
@@ -73,10 +77,13 @@ for blob_index, stage_one_blob in enumerate(img.find_blobs(stage_one_thresholds,
                 pix_vals = img.get_pixel(pix_location[0], pix_location[1])
                 lab_pix_vals = image.rgb_to_lab(pix_vals)
 
-                if (lab_pix_vals[1] < 0) & (abs(lab_pix_vals[2] - lab_pix_vals[1]) > 40):
+                if (lab_pix_vals[1] < 0) & (abs(lab_pix_vals[2] - lab_pix_vals[1]) > 10) & (lab_pix_vals[0] > (blob_stats.l_mean() - 5)):
                     pass
+
                 else:
+                    #pass
                     img.set_pixel(pix_location[0], pix_location[1], (255, 70, 255))
+
 
 
                 '''
@@ -88,12 +95,15 @@ for blob_index, stage_one_blob in enumerate(img.find_blobs(stage_one_thresholds,
         '''
         stage_two_thresholds = [(0, blob_stats.l_mode() + 5, blob_stats.a_mean(), 128, -127, blob_stats.b_mean())]
 
-
-
         for stage_two_blob in img.find_blobs(stage_two_thresholds, merge = False, roi = (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3])):
             img.draw_rectangle(stage_two_blob.rect(), color = 0)
         '''
-    img.save("/blob_" + str(blob_index), 100, (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3]))
+'''
+img_writer = image.ImageWriter('./snap_' + str(time.ticks()) + '.bin')
+img_writer.add_frame(img)
+img_writer.close()
+'''
+
+print(img.compressed_for_ide(quality = 25))
 
 sensor.flush()
-time.sleep(3000)
