@@ -4,9 +4,9 @@ sensor.reset()
 sensor.set_pixformat(sensor.GRAYSCALE)
 sensor.set_framesize(sensor.QVGA)
 sensor.skip_frames(time = 2000)
-sensor.set_auto_gain(False, value = 128) # must be turned off for color tracking
+sensor.set_auto_gain(False, gain_db = 128) # must be turned off for color tracking
 sensor.set_auto_whitebal(False) # must be turned off for color tracking
-sensor.set_auto_exposure(False, value = 64)
+sensor.set_auto_exposure(False, exposure_us = 300)
 clock = time.clock()
 
 
@@ -22,19 +22,6 @@ l_red.off() #red heartbeat
 l_green.on() #green heartbeat
 time.sleep(200)
 l_green.off() #green heartbeat
-
-
-
-#for i in range(1000):
-
-#get white balance. You have two seconds.
-t_start = time.ticks()
-t_elapsed = 0
-while(t_elapsed < 4000):
-    img = sensor.snapshot()
-    t_elapsed = time.ticks() - t_start
-    print(img.compressed_for_ide(quality = 25))
-
 
 img = sensor.snapshot()         # Take a picture and return the image.
 
@@ -56,33 +43,36 @@ B = -127 is blue and 128 is yellow.
 img_hist = img.get_histogram()
 img_stats = img_hist.get_statistics()
 
-stage_one_thresholds = [( 100, 255)]
-avg_window = 10
-win_sum = 0
-bad_pix = []
-i = 0
+leaf_thresholds = [( 100, 120)]
+bad_thresholds = [( 0, 40)]
 
-for blob_index, stage_one_blob in enumerate(img.find_blobs(stage_one_thresholds, pixels_threshold=100, area_threshold=100, merge = True)):
-    blob_hist = img.get_histogram(roi = (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3]))
-    blob_stats = blob_hist.get_statistics()
-    print("blob found: ")
-    print(stage_one_blob.rect())
-    img.draw_rectangle(stage_one_blob.rect(), color = 120)
+for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
+    print("leaf blob found: ")
+    print(leaf_blob.rect())
+    img.draw_rectangle(leaf_blob.rect(), color = 255)
+    leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
+    # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
+    leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3]
+    leaf_area = leaf_blob[2] * leaf_blob[3]
+    for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
+        print("bad blob found: ")
+        print(bad_blob.rect())
+        img.draw_rectangle(bad_blob.rect(), color = 127)
+        bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
+        # more undoing of mean function
+        bad_rect_pix_sum = bad_rect_stats.mean()*bad_blob[2]*bad_blob[3]
+        # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
+        leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum
+        # tracking the remaining area of the leaf as the bad_rects are removed
+        leaf_area = leaf_area - (bad_blob[2] * bad_blob[3])
 
-    for x in range(stage_one_blob[2]):
-        for y in range(stage_one_blob[3]):
-            pix_location = [stage_one_blob[0] + x, stage_one_blob[1] + y]
-            pix_val = img.get_pixel(pix_location[0], pix_location[1])
+    leaf_rect_mean = leaf_rect_stats.mean()
+    leaf_mean = leaf_rect_pix_sum / leaf_area
+    print("leaf mean = %i [outer mean = %i]" % (leaf_mean, leaf_rect_mean))
 
-            # if the avgerage value in a square around the pixel is black, remove pixel, if it is white, include pixel
-            window_stats = img.get_stats(roi = (pix_location[0] - int(avg_window/2), pix_location[1] - int(avg_window/2), avg_window, avg_window))
-            # win_avg contains the average pixel value for the window of size avg_window X avg_window centered at pix_location
-            if (window_stats.mean() < 100):
-                pass
-            else:
-                bad_pix.append((pix_location[0], pix_location[1]))
+print(img.compressed_for_ide(quality = 25))
 
-print(size_of(bad_pix))
+
 '''
     if (abs(blob_stats.a_mean() - blob_stats.b_mean()) > 20) & (blob_stats.a_max() - blob_stats.a_min() > 20) & (blob_stats.b_max() - blob_stats.b_min() > 20): #if the a and b histograms are close together it means the color is probably white and should be discarded
 
@@ -116,31 +106,6 @@ print(size_of(bad_pix))
 
     #img.save("/blob_" + str(blob_index), 100, (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3]))
 '''
-img_writer = image.ImageWriter('./snap_' + str(time.ticks()) + '.bin')
-img_writer.add_frame(img)
-img_writer.close()
-
-print(img.compressed_for_ide(quality = 25))
 
 sensor.flush()
 time.sleep(3000)
-
-'''
-Goal is to make sure we're evaluating the right areas in a photo for NDVI change.
-If we found the edges of a leaf, that feels the most powerful...
-
-Either way, we need to make sure we're looking only at leaf, and not other semi-reflective objects.
-Similarly we want to ensure that if the leaf has parts that are dying, we don't remove those. It
-feels like once we have identified a leaf, we move into the center and then create a reliable area
-to perform operations on.
-
-One way to do this is use the blob function to get a centroid - centroids seem to be pretty
-reliable. We then create an area around the centroid to perform NDVI on, the larger the area the
-less likely noise and anomolies hurt us, the smaller the area the safer we are from including
-pixels off the leaf.
-
-We can use the blobs rect specs and density to calculate the size of the area. Something like
-ndvi_area = rect_area*density ... if ndvi_area > area_min, ndvi_area = 0 to ensure if a bad
-blob is found or the leaf is too small we don't bother with it.
-
-img.find_edges(image.EDGE_SIMPLE, (80, 120))
