@@ -4,9 +4,9 @@ sensor.reset()
 sensor.set_pixformat(sensor.GRAYSCALE)
 sensor.set_framesize(sensor.QVGA)
 sensor.skip_frames(time = 2000)
-sensor.set_auto_gain(False, gain_db = 128) # must be turned off for color tracking
+sensor.set_auto_gain(False, gain_db = 32) # must be turned off for color tracking
 sensor.set_auto_whitebal(False) # must be turned off for color tracking
-sensor.set_auto_exposure(False, exposure_us = 300)
+sensor.set_auto_exposure(False, exposure_us = 420)
 clock = time.clock()
 
 
@@ -43,7 +43,7 @@ B = -127 is blue and 128 is yellow.
 img_hist = img.get_histogram()
 img_stats = img_hist.get_statistics()
 
-leaf_thresholds = [( 100, 120)]
+leaf_thresholds = [( 180, 255)]
 bad_thresholds = [( 0, 40)]
 
 for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
