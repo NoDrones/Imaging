@@ -28,28 +28,22 @@ t_elapsed = 0
 
 img = sensor.snapshot()
 
-bus = pyb.I2C(2, pyb.I2C.MASTER)
-bus.deinit() # Fully reset I2C device...
-bus = pyb.I2C(2, pyb.I2C.MASTER)
+i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
+i2c_obj.deinit() # Fully reset I2C device...
+i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
 
-print(bus)
+print(i2c_obj)
 print("Beginning...")
-data = bytearray(16)
+data = bytearray(4)
+print(data)
 
 while(True):
     try:
-        bus.recv(data, 0x12,timeout=10000)
+        i2c_obj.recv(data, 0x12,timeout=10000)
         print(data)
-        print(ustruct.unpack("<ds", data))
-        try:
-            bus.recv(data, 0x12,timeout=10000)
-            print(data)
-            print(ustruct.unpack("<ds", data))
-        except OSError as err:
-            print(err)
-            pass # Don't care about errors - so pass.
-            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
-            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
+        unpacked_data = ustruct.unpack("<i", data)
+        print(unpacked_data)
+
     except OSError as err:
         print(err)
         pass # Don't care about errors - so pass.
