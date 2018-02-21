@@ -17,14 +17,15 @@ import sensor, time, image
 sensor.reset()
 
 # Sensor settings
-sensor.set_contrast(1)
+sensor.set_contrast(3)
 sensor.set_gainceiling(16)
 # HQVGA and GRAYSCALE are the best for face tracking.
 sensor.set_framesize(sensor.VGA)
 sensor.set_windowing((240, 160))
 sensor.set_pixformat(sensor.GRAYSCALE)
 sensor.set_auto_gain(True)
-sensor.set_auto_exposure(True)
+sensor.set_auto_exposure(False, value = 30)
+
 
 # Skip a few frames to allow the sensor settle down
 sensor.skip_frames(time = 2000)
@@ -33,7 +34,7 @@ sensor.skip_frames(time = 2000)
 
 # Load Haar Cascade
 # By default this will use all stages, lower satges is faster but less accurate.
-beetle_cascade = image.HaarCascade("/potato_beetle0.cascade", stages=20)
+beetle_cascade = image.HaarCascade("./potato_beetle0.cascade", stages=20)
 
 # FPS clock
 clock = time.clock()
