@@ -1,13 +1,24 @@
 #Author: Calvin Ryan
 import sensor, image, time, pyb, math
 
-def set_custom_exposure(high_l_mean_thresh = 10, low_l_mean_thresh = 9):
+def set_custom_exposure(high_l_mean_thresh = 14, low_l_mean_thresh = 13):
     try:
         print("Starting Exposure Adjustment...")
+        b_gain = sensor.__read_reg(0x01)
+        r_gain = sensor.__read_reg(0x02)
+        g_gain = sensor.__read_reg(0x03)
+        r_gain = round(r_gain/3)
+        g_gain = round(g_gain/3)
+        b_gain = round(b_gain/3)
+        sensor.__write_reg(0x01, b_gain)
+        sensor.__write_reg(0x02, r_gain)
+        sensor.__write_reg(0x03, g_gain)
+
         img = sensor.snapshot()         # Take a picture and return the image.
         img_stats = img.get_statistics()
         l_mean = img_stats.l_mean()
         count = 0
+        cur_gain = sensor.__read_reg(0x00)
 
         while(((l_mean > high_l_mean_thresh) | (l_mean < low_l_mean_thresh))) & (count < 1000):
 
@@ -15,21 +26,18 @@ def set_custom_exposure(high_l_mean_thresh = 10, low_l_mean_thresh = 9):
             img_stats = img.get_statistics()
             l_mean = img_stats.l_mean()
 
-            cur_exposure_msb = sensor.__read_reg(0x08)
-            cur_exposure_lsb = sensor.__read_reg(0x10)
-            cur_exposure = (cur_exposure_msb << 8) + cur_exposure_lsb
-
-            print("current exposure: " + str(cur_exposure))
-            print("l_mean: " + str(l_mean))
+            #print("current gain: " + str(cur_gain))
+            #print("l_mean: " + str(l_mean))
 
             if l_mean > high_l_mean_thresh:
-                new_exposure = cur_exposure - 2
+                new_gain = cur_gain - 1
             elif l_mean < low_l_mean_thresh:
-                new_exposure = cur_exposure + 2
+                new_gain = cur_gain + 1
             else:
                 break #we're in the range now!
 
-            sensor.set_auto_exposure(False, value = new_exposure)
+            sensor.__write_reg(0x00, new_gain)
+            cur_gain = new_gain
             count += 1
 
         if count < 1000:
@@ -43,12 +51,10 @@ def set_custom_exposure(high_l_mean_thresh = 10, low_l_mean_thresh = 9):
         print("Error occured!")
         return -2
 
+
 if __name__ == "__main__":
 
-    l_red = pyb.LED(1)
-    l_green = pyb.LED(2)
-    l_blue = pyb.LED(3)
-    l_IR = pyb.LED(4)
+    ########### SETUP STUFF
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -63,16 +69,11 @@ if __name__ == "__main__":
         img = sensor.snapshot()
         t_elapsed = time.ticks() - t_start
 
-
-    img_stats = img.get_statistics()
-
     sensor.set_auto_gain(False) # must be turned off for color tracking
     sensor.set_auto_whitebal(False) # must be turned off for color tracking
+    sensor.set_auto_exposure(False)
     set_l_mean = set_custom_exposure() #default thresholds
     sensor.set_contrast(+3)
-
-    l_red.toggle() #heartbeat
-    l_green.toggle() #green heartbeat
 
     img = sensor.snapshot()
 
@@ -82,114 +83,134 @@ if __name__ == "__main__":
     B = -127 is blue and 128 is yellow.
     '''
 
-    img_hist = img.get_histogram()
-    img_stats = img_hist.get_statistics()
+    img_stats = img.get_statistics()
 
 
-    stage_one_thresholds = [(img_stats.l_mean() - 1, 100, -127, img_stats.a_mean() - 4, img_stats.b_mean() - 8, 60)]
 
-    stage_one_blobs = []
 
-    for blob_index, stage_one_blob in enumerate(img.find_blobs(stage_one_thresholds, pixels_threshold=250, area_threshold=250, merge = True, margin = 15)):
-        blob_hist = img.get_histogram(roi = (stage_one_blob[0] - 10, stage_one_blob[1] - 10, stage_one_blob[2] + 20, stage_one_blob[3] + 20))
+
+    ########### FIND BAD BLOBS
+
+    stage_one_bad_thresholds = [(30, 100, 0, 127, 10, 128)]
+
+    unhealthy_full_l_mean = 0
+    unhealthy_full_a_mean = 0
+    unhealthy_full_b_mean = 0
+    unhealthy_centroid_l_mean = 0
+    unhealthy_centroid_a_mean = 0
+    unhealthy_centroid_b_mean = 0
+    healthy_full_l_mean = 0
+    healthy_full_a_mean = 0
+    healthy_full_b_mean = 0
+    healthy_centroid_l_mean = 0
+    healthy_centroid_a_mean = 0
+    healthy_centroid_b_mean = 0
+
+
+    for blob_index, stage_one_bad_blob in enumerate(img.find_blobs(stage_one_bad_thresholds, pixels_threshold=200, area_threshold=200, merge = False, margin = 15)):
+        blob_hist = img.get_histogram(roi = (stage_one_bad_blob[0], stage_one_bad_blob[1], stage_one_bad_blob[2], stage_one_bad_blob[3]))
         blob_stats = blob_hist.get_statistics()
 
-        print("1st check: " + str(stage_one_blob))
+        print("stage_one_bad_blob: " + str(stage_one_bad_blob))
+        print("density: " + str(stage_one_bad_blob.density()))
+        print("full: " + str(blob_stats))
+        unhealthy_full_l_mean += blob_stats[0]
+        unhealthy_full_a_mean += blob_stats[8]
+        unhealthy_full_b_mean += blob_stats[16]
 
-        #if (blob_stats.l_mean() > img_stats.l_mean())):
-        #if (abs(blob_stats.a_mean() - blob_stats.b_mean()) > 6) & ((blob_stats.l_mean() > img_stats.l_lq()) & (blob_stats.l_mean() < img_stats.l_uq())): #& (blob_stats.a_max() - blob_stats.a_min() > 20) & (blob_stats.b_max() - blob_stats.b_min() > 20): #if the a and b histograms are close together it means the color is probably white and should be discarded
-        if ((abs(blob_stats.a_mean() - blob_stats.b_mean()) > 6) & (blob_stats.l_mean() > set_l_mean + 2) & (blob_stats.l_mean() < (set_l_mean + 3 * blob_stats.l_stdev()))):
-            print("2nd check: " + str(stage_one_blob))
+        side_l = stage_one_bad_blob.density() * min(stage_one_bad_blob[2], stage_one_bad_blob[3])
 
-            img.draw_rectangle(stage_one_blob.rect(), color = (255, 255, 0)) #yellow
-            img.draw_rectangle((stage_one_blob[0] - 10, stage_one_blob[1] - 10, stage_one_blob[2] + 20, stage_one_blob[3] + 20), color = (255, 0, 255)) #purple
+        partial_hist = img.get_histogram(roi = (stage_one_bad_blob.cx() - round(side_l/2), stage_one_bad_blob.cy() - round(side_l/2), round(side_l), round(side_l)))
+        partial_stats = partial_hist.get_statistics()
+        print("partial: "+ str(partial_stats))
+        print("\n")
+        unhealthy_centroid_l_mean += partial_stats[0]
+        unhealthy_centroid_a_mean += partial_stats[8]
+        unhealthy_centroid_b_mean += partial_stats[16]
 
-            for x in range(stage_one_blob[2] + 20):
-                for y in range(stage_one_blob[3] + 20):
-                    try:
-                        pix_location = [stage_one_blob[0] - 10 + x, stage_one_blob[1] - 10 + y]
-                        pix_vals = img.get_pixel(pix_location[0], pix_location[1])
-                        lab_pix_vals = image.rgb_to_lab(pix_vals)
+        img.draw_rectangle(stage_one_bad_blob.rect(), color = (255, 0, 255)) #purple
+        img.draw_rectangle((stage_one_bad_blob.cx() - round(side_l/2), stage_one_bad_blob.cy() - round(side_l/2), round(side_l), round(side_l)), color = (255, 85, 0))
 
-                        if ((lab_pix_vals[1] < (blob_stats.a_mean() + 2 * blob_stats.a_stdev())) & (lab_pix_vals[0] >= (blob_stats.l_mean() - .1 * blob_stats.l_stdev()))): #& (abs(lab_pix_vals[2] - lab_pix_vals[1]) > 10) & (lab_pix_vals[0] > (blob_stats.l_mean() - 10)):
-                            pass
-                        else:
-                            img.set_pixel(pix_location[0], pix_location[1], (255, 0, 0))
-                    except:
-                        pass #pixel doesn't exist
+    unhealthy_full_l_mean = unhealthy_full_l_mean/(blob_index + 1)
+    unhealthy_full_a_mean = unhealthy_full_a_mean/(blob_index + 1)
+    unhealthy_full_b_mean = unhealthy_full_b_mean/(blob_index + 1)
+    unhealthy_centroid_l_mean = unhealthy_centroid_l_mean/(blob_index + 1)
+    unhealthy_centroid_a_mean = unhealthy_centroid_a_mean/(blob_index + 1)
+    unhealthy_centroid_b_mean = unhealthy_centroid_b_mean/(blob_index + 1)
 
 
-            stage_two_thresholds = [(0, 100, -127, 0, -40, 10)]
-
-            for blob_index, stage_two_blob in enumerate(img.find_blobs(stage_two_thresholds, roi = (stage_one_blob[0] - 10, stage_one_blob[1] - 10, stage_one_blob[2] + 20, stage_one_blob[3] + 20), pixels_threshold= 100, area_threshold=100, merge = False)):
-                img.draw_rectangle(stage_two_blob.rect(), color = (255, 255, 0)) #yellow
-                img.draw_circle(stage_two_blob.cx(), stage_two_blob.cy(), int(stage_two_blob.density() * min(stage_two_blob[2], stage_two_blob[3])))
-
-            lab_pix_grid_vals = []
-            '''
-            #smoothing
-            for x in range(stage_one_blob[2] + 20):
-                for y in range(stage_one_blob[3] + 20):`
-                    try:
-                        pix_location = [stage_one_blob[0] - 10 + x, stage_one_blob[1] - 10 + y]
-                        for x_sub in range(3):
-                            for y_sub in range(3):
-                                #print(str(x_sub) + ", " + str(y_sub))
-                                pix_vals = img.get_pixel(pix_location[0] - 1 + x_sub, pix_location[1] - 1 + y_sub)
-                                lab_pix_grid_vals.append(image.rgb_to_lab(pix_vals))
-
-                        # |------------
-                        # | 0 | 3 | 6 |
-                        # |------------
-                        # | 1 | 4 | 7 |
-                        # |------------
-                        # | 2 | 5 | 8 |
-                        # |------------
-
-                        average0 = (lab_pix_grid_vals[0] + lab_pix_grid_vals[1] + lab_pix_grid_vals[2])/(3, 3, 3)
-                        average1 = (lab_pix_grid_vals[1] + lab_pix_grid_vals[2] + lab_pix_grid_vals[5])/(3, 3, 3)
-                        average2 = (lab_pix_grid_vals[2] + lab_pix_grid_vals[5] + lab_pix_grid_vals[8])/(3, 3, 3)
-                        average3 = (lab_pix_grid_vals[5] + lab_pix_grid_vals[8] + lab_pix_grid_vals[7])/(3, 3, 3)
-                        average4 = (lab_pix_grid_vals[8] + lab_pix_grid_vals[7] + lab_pix_grid_vals[6])/(3, 3, 3)
-                        average5 = (lab_pix_grid_vals[8] + lab_pix_grid_vals[7] + lab_pix_grid_vals[6])/(3, 3, 3)
-                        average6 = (lab_pix_grid_vals[7] + lab_pix_grid_vals[6] + lab_pix_grid_vals[3])/(3, 3, 3)
-                        average7 = (lab_pix_grid_vals[6] + lab_pix_grid_vals[3] + lab_pix_grid_vals[0])/(3, 3, 3)
-                        average_list = [average0, average1, average2, average3, average4, average5, average6, average7 ]
-                        dif_list = [abs(lab_pix_grid_vals[4] - average0), abs(lab_pix_grid_vals[4] - average1), abs(lab_pix_grid_vals[4] - average2), abs(lab_pix_grid_vals[4] - average3), abs(lab_pix_grid_vals[4] - average4), abs(lab_pix_grid_vals[4] - average5), abs(lab_pix_grid_vals[4] - average6), abs(lab_pix_grid_vals[4] - average7)]
-
-                        min_dif_index = min(dif_list)
-
-                        img.set_pixel(pix_location[0], pix_location[1], average_list(dif_list.index(min_dif_index)))
-
-                    except:
-                        pass #pixel dsoesn't exist
-            '''
+    print("------------------------------------------------------------------------")
 
 
 
+    ########### FIND GOOD BLOBS
 
-            #if ((abs(blob_stats.a_mean() - blob_stats.b_mean()) > 10) | ((blob_stats.l_mean() > img_stats.l_lq()) & (blob_stats.l_mean() < img_stats.l_uq()))) & (blob_stats.a_max() - blob_stats.a_min() > 20) & (blob_stats.b_max() - blob_stats.b_min() > 20): #if the a and b histograms are close together it means the color is probably white and should be discarded
-            '''
-            img.draw_cross(stage_one_blob.cx(), stage_one_blob.cy())
-            blob_slope = math.tan(stage_one_blob.rotation())
-            print("slope: " + str(blob_slope))
-            img.draw_cross(0,0, size = 10) #this is weird. origin is in the top left corner
-            img.draw_cross(310, 230, size = 10, color = (0, 0, 255)) #this is weird. positive window limit is in the bottom right corner.
-            img.draw_line((stage_one_blob.cx(), stage_one_blob.cy(), stage_one_blob.cx() + 40, stage_one_blob.cy() - round(blob_slope * 40)), color = (255, 255, 0))
-            img.draw_line((stage_one_blob.cx(), stage_one_blob.cy(), stage_one_blob.cx() - 40, stage_one_blob.cy() + round(blob_slope * 40)), color = (255, 255, 0))
-            print("density: " + str(stage_one_blob.density()))
-            '''
+    #stage_one_good_thresholds = [(img_stats.l_mean() - 1, 100, -127, img_stats.a_mean() - 4, img_stats.b_mean() - 8, 60)]
+    stage_one_good_thresholds = [(30, 100, -127, 0, -10, 10)]
 
-    '''
-    img_writer = image.ImageWriter('./snap_' + str(time.ticks()) + '.bin')
-    img_writer.add_frame(img)
-    img_writer.close()
-    '''
+    for blob_index, stage_one_good_blob in enumerate(img.find_blobs(stage_one_good_thresholds, pixels_threshold=200, area_threshold=200, merge = False, margin = 15)):
+        blob_hist = img.get_histogram(roi = (stage_one_good_blob[0], stage_one_good_blob[1], stage_one_good_blob[2], stage_one_good_blob[3]))
+        blob_stats = blob_hist.get_statistics()
+
+
+        print("stage_one_good_blob: " + str(stage_one_good_blob))
+        print("density: " + str(stage_one_good_blob.density()))
+        print("full: "+ str(blob_stats))
+        healthy_full_l_mean += blob_stats[0]
+        healthy_full_a_mean += blob_stats[8]
+        healthy_full_b_mean += blob_stats[16]
+
+        side_l = stage_one_good_blob.density() * min(stage_one_good_blob[2], stage_one_good_blob[3])
+
+        partial_hist = img.get_histogram(roi = (stage_one_good_blob.cx() - round(side_l/2), stage_one_good_blob.cy() - round(side_l/2), round(side_l), round(side_l)))
+        partial_stats = partial_hist.get_statistics()
+        print("partial: "+ str(partial_stats))
+        print("\n")
+        healthy_centroid_l_mean += partial_stats[0]
+        healthy_centroid_a_mean += partial_stats[8]
+        healthy_centroid_b_mean += partial_stats[16]
+
+        img.draw_rectangle(stage_one_good_blob.rect(), color = (255, 255, 0)) #yellow
+        img.draw_rectangle((stage_one_good_blob.cx() - round(side_l/2), stage_one_good_blob.cy() - round(side_l/2), round(side_l), round(side_l)), color = (255, 85, 0))
+
+        ########## COLOR IT ALL IN
+
+        for x in range(stage_one_good_blob[2]):
+            for y in range(stage_one_good_blob[3]):
+                pix_location = (stage_one_good_blob[0] + x, stage_one_good_blob[1] + y)
+                pix_vals = img.get_pixel(pix_location[0], pix_location[1])
+                lab_pix_vals = image.rgb_to_lab(pix_vals)
+
+                if ((lab_pix_vals[1] < (blob_stats.a_mean() + 2 * blob_stats.a_stdev())) & (lab_pix_vals[0] >= (blob_stats.l_mean() - .1 * blob_stats.l_stdev()))): #& (abs(lab_pix_vals[2] - lab_pix_vals[1]) > 10) & (lab_pix_vals[0] > (blob_stats.l_mean() - 10)):
+                    pass
+                else:
+                    pass
+                    #img.set_pixel(pix_location[0], pix_location[1], (255, 0, 0))
+
+    healthy_full_l_mean = healthy_full_l_mean/(blob_index + 1)
+    healthy_full_a_mean = healthy_full_a_mean/(blob_index + 1)
+    healthy_full_b_mean = healthy_full_b_mean/(blob_index + 1)
+    healthy_centroid_l_mean = healthy_centroid_l_mean/(blob_index + 1)
+    healthy_centroid_a_mean = healthy_centroid_a_mean/(blob_index + 1)
+    healthy_centroid_b_mean = healthy_centroid_b_mean/(blob_index + 1)
+
+
 
     print(img.compress_for_ide(quality = 50))
 
-
-    #save_jpeg.save('./snap_' + str(time.ticks()))
+    print("~~~~~~~~~~~~~~~ RESULTS: ~~~~~~~~~~~~~~~~")
+    print("unhealthy full l mean: " + str(unhealthy_full_l_mean))
+    print("unhealthy full a mean: " + str(unhealthy_full_a_mean))
+    print("unhealthy full b mean: " + str(unhealthy_full_b_mean))
+    print("unhealthy centroid l mean: " + str(unhealthy_centroid_l_mean))
+    print("unhealthy centroid a mean: " + str(unhealthy_centroid_a_mean))
+    print("unhealthy centroid b mean: " + str(unhealthy_centroid_b_mean))
+    print("healthy full l mean: " + str(healthy_full_l_mean))
+    print("healthy full a mean: " + str(healthy_full_a_mean))
+    print("healthy full b mean: " + str(healthy_full_b_mean))
+    print("healthy centroid l mean: " + str(healthy_centroid_l_mean))
+    print("healthy centroid a mean: " + str(healthy_centroid_a_mean))
+    print("healthy centroid b mean: " + str(healthy_centroid_b_mean))
 
 
 
