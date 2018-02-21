@@ -43,14 +43,17 @@ B = -127 is blue and 128 is yellow.
 img_hist = img.get_histogram()
 img_stats = img_hist.get_statistics()
 
-healthy_leaf_thresholds = [( 180, 255)]
+healthy_leaf_thresholds = [(180, 255)]
 unhealthy_leaf_thresholds = [(70, 120)]
 bad_thresholds = [( 0, 40)]
 
 healthy_leaves_mean_sum = 0
 unhealthy_leaves_mean_sum = 0
 
+blob_found = False
+
 for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
+    blob_found = True
     print("leaf blob found: ")
     print(leaf_blob.rect())
     img.draw_rectangle(leaf_blob.rect(), color = 255)
@@ -58,13 +61,14 @@ for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_threshol
     # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
     leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3]
     leaf_area = leaf_blob[2] * leaf_blob[3]
+
     for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
         print("bad blob found: ")
         print(bad_blob.rect())
         img.draw_rectangle(bad_blob.rect(), color = 127)
         bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
         # more undoing of mean function
-        bad_rect_pix_sum = bad_rect_stats.mean()*bad_blob[2]*bad_blob[3]
+        bad_rect_pix_sum = bad_rect_stats.mean() * bad_blob[2] * bad_blob[3]
         # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
         leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum
         # tracking the remaining area of the leaf as the bad_rects are removed
@@ -77,9 +81,13 @@ for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_threshol
     healthy_leaves_mean_sum = healthy_leaves_mean_sum + leaf_mean
 
 # calculates the average value for the healthy leaves regardless of leaf size
-healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
+if (blob_found == True):
+    healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
+
+blob_found = False
 
 for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(unhealthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
+    blob_found = True
     print("leaf blob found: ")
     print(leaf_blob.rect())
     img.draw_rectangle(leaf_blob.rect(), color = 255)
@@ -106,45 +114,19 @@ for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(unhealthy_leaf_thresh
     unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_mean
 
 # calculates the average value for the healthy leaves regardless of leaf size
-unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
+if (blob_found == True):
+    unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
 
 print("healthy mean = %i; unhealthy mean = %i" % (healthy_mean, unhealthy_mean))
+if (unhealthy_mean < 135):
+    print("You got some seriously unhealthy leafage there, figure it out")
+elif (unhealthy_mean < 145):
+    print("Some leaves are unhappy, although they're soldiering on")
+else:
+    print("Even your unhealthy leaves are healthy!")
+
+
 print(img.compressed_for_ide(quality = 25))
-
-
-'''
-    if (abs(blob_stats.a_mean() - blob_stats.b_mean()) > 20) & (blob_stats.a_max() - blob_stats.a_min() > 20) & (blob_stats.b_max() - blob_stats.b_min() > 20): #if the a and b histograms are close together it means the color is probably white and should be discarded
-
-        img.draw_rectangle(stage_one_blob.rect(), color = 120)
-
-        l_blue.toggle()
-
-        for x in range(stage_one_blob[2]):
-            for y in range(stage_one_blob[3]):
-                pix_location = [stage_one_blob[0] + x, stage_one_blob[1] + y]
-                pix_vals = img.get_pixel(pix_location[0], pix_location[1])
-                lab_pix_vals = image.rgb_to_lab(pix_vals)
-
-                if (lab_pix_vals[1] < 0) & (abs(lab_pix_vals[2] - lab_pix_vals[1]) > 40):
-                    pass
-                else:
-                    img.set_pixel(pix_location[0], pix_location[1], (255, 70, 255))
-
-                if (pix_vals[0] <= 20) | (pix_vals[1] <= 20) | (pix_vals[2] <= 20):
-
-                    img.set_pixel(pix_location[0], pix_location[1], (255, 70, 255))
-
-
-
-        stage_two_thresholds = [(0, blob_stats.l_mode() + 5, blob_stats.a_mean(), 128, -127, blob_stats.b_mean())]
-
-
-
-        for stage_two_blob in img.find_blobs(stage_two_thresholds, merge = False, roi = (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3])):
-            img.draw_rectangle(stage_two_blob.rect(), color = 0)
-
-    #img.save("/blob_" + str(blob_index), 100, (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3]))
-'''
 
 sensor.flush()
 time.sleep(3000)

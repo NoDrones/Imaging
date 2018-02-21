@@ -1,12 +1,12 @@
 import sensor, image, time, pyb
 
 sensor.reset()
-sensor.set_pixformat(sensor.GRAYSCALE)
+sensor.set_pixformat(sensor.RGB565)
 sensor.set_framesize(sensor.QVGA)
 sensor.skip_frames(time = 2000)
-sensor.set_auto_gain(False, gain_db = 32) # must be turned off for color tracking
+sensor.set_auto_gain(False) # must be turned off for color tracking
 sensor.set_auto_whitebal(False) # must be turned off for color tracking
-sensor.set_auto_exposure(False, exposure_us = 420)
+sensor.set_auto_exposure(False, exposure_us = 3000)
 clock = time.clock()
 
 
@@ -42,74 +42,46 @@ B = -127 is blue and 128 is yellow.
 
 img_hist = img.get_histogram()
 img_stats = img_hist.get_statistics()
+#print(img.compressed_for_ide(quality = 25))
 
-healthy_leaf_thresholds = [( 180, 255)]
-unhealthy_leaf_thresholds = [(70, 120)]
-bad_thresholds = [( 0, 40)]
+leaf_thresholds = [(0, 100, -127, img_stats.a_mode() - 2, img_stats.b_mode() + 2, 60)]
+bad_thresholds = [(0, 50, 0, 127, -127, 127)]
+# green is -a, yellow is +b, blue is -b, red is +a
 
-healthy_leaves_mean_sum = 0
-unhealthy_leaves_mean_sum = 0
+leaves_mean_a_sum = 0
+a_mean = 0
+blob_found = False
 
-for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
+for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
+    blob_found = True
     print("leaf blob found: ")
     print(leaf_blob.rect())
-    img.draw_rectangle(leaf_blob.rect(), color = 255)
+    img.draw_rectangle(leaf_blob.rect(), color = (0, 0, 100))
     leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
     # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
-    leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3]
+    leaf_rect_pix_a_sum = leaf_rect_stats.a_mean() * leaf_blob[2] * leaf_blob[3]
     leaf_area = leaf_blob[2] * leaf_blob[3]
     for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
         print("bad blob found: ")
         print(bad_blob.rect())
-        img.draw_rectangle(bad_blob.rect(), color = 127)
+        img.draw_rectangle(bad_blob.rect(), color = (100, 0, 0))
         bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
         # more undoing of mean function
-        bad_rect_pix_sum = bad_rect_stats.mean()*bad_blob[2]*bad_blob[3]
+        bad_rect_pix_a_sum = bad_rect_stats.a_mean() * bad_blob[2] * bad_blob[3]
         # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
-        leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum
+        leaf_rect_pix_a_sum = leaf_rect_pix_a_sum - bad_rect_pix_a_sum
         # tracking the remaining area of the leaf as the bad_rects are removed
         leaf_area = leaf_area - (bad_blob[2] * bad_blob[3])
 
-    leaf_rect_mean = leaf_rect_stats.mean()
-    leaf_mean = leaf_rect_pix_sum / leaf_area
-    print("healthy leaf mean = %i [outer mean = %i]" % (leaf_mean, leaf_rect_mean))
+    leaf_rect_a_mean = leaf_rect_stats.a_mean()
+    leaf_a_mean = leaf_rect_pix_a_sum / leaf_area
+    print("leaf a mean = %i [outer a mean = %i]" % (leaf_a_mean, leaf_rect_a_mean))
     # the below function does not take into account the size of a leaf... each leaf is weighted equally
-    healthy_leaves_mean_sum = healthy_leaves_mean_sum + leaf_mean
+    leaves_mean_a_sum = leaves_mean_a_sum + leaf_a_mean
 
 # calculates the average value for the healthy leaves regardless of leaf size
-healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
-
-for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(unhealthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
-    print("leaf blob found: ")
-    print(leaf_blob.rect())
-    img.draw_rectangle(leaf_blob.rect(), color = 255)
-    leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
-    # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
-    leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3]
-    leaf_area = leaf_blob[2] * leaf_blob[3]
-    for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
-        print("bad blob found: ")
-        print(bad_blob.rect())
-        img.draw_rectangle(bad_blob.rect(), color = 127)
-        bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
-        # more undoing of mean function
-        bad_rect_pix_sum = bad_rect_stats.mean()*bad_blob[2]*bad_blob[3]
-        # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
-        leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum
-        # tracking the remaining area of the leaf as the bad_rects are removed
-        leaf_area = leaf_area - (bad_blob[2] * bad_blob[3])
-
-    leaf_rect_mean = leaf_rect_stats.mean()
-    leaf_mean = leaf_rect_pix_sum / leaf_area
-    print("unhealthy leaf mean = %i [outer mean = %i]" % (leaf_mean, leaf_rect_mean))
-    # the below function does not take into account the size of a leaf... each leaf is weighted equally
-    unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_mean
-
-# calculates the average value for the healthy leaves regardless of leaf size
-unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
-
-print("healthy mean = %i; unhealthy mean = %i" % (healthy_mean, unhealthy_mean))
-print(img.compressed_for_ide(quality = 25))
+if (blob_found):
+    a_mean = leaves_mean_a_sum / (leaf_blob_index + 1)
 
 
 '''
