@@ -1,5 +1,5 @@
 #Author: Calvin Ryan
-import sensor, image, time
+import sensor, image, time, pyb, math
 
 def set_custom_exposure(high_l_mean_thresh = 14, low_l_mean_thresh = 13):
     try:
@@ -69,9 +69,11 @@ if __name__ == "__main__":
         img = sensor.snapshot()
         t_elapsed = time.ticks() - t_start
 
+
     sensor.set_auto_gain(False) # must be turned off for color tracking
     sensor.set_auto_whitebal(False) # must be turned off for color tracking
     sensor.set_auto_exposure(False)
+
     set_l_mean = set_custom_exposure() #default thresholds
     sensor.set_contrast(+3)
 
@@ -91,7 +93,7 @@ if __name__ == "__main__":
 
     ########### FIND BAD BLOBS
 
-
+    stage_one_bad_thresholds = [(30, 100, 0, 127, 10, 128)]
 
     unhealthy_full_l_mean = 0
     unhealthy_full_a_mean = 0
@@ -99,52 +101,38 @@ if __name__ == "__main__":
     unhealthy_centroid_l_mean = 0
     unhealthy_centroid_a_mean = 0
     unhealthy_centroid_b_mean = 0
-    unhealthy_blob_l_mean = 0
-    unhealthy_blob_a_mean = 0
-    unhealthy_blob_b_mean = 0
     healthy_full_l_mean = 0
     healthy_full_a_mean = 0
     healthy_full_b_mean = 0
     healthy_centroid_l_mean = 0
     healthy_centroid_a_mean = 0
     healthy_centroid_b_mean = 0
-    healthy_blob_l_mean = 0
-    healthy_blob_a_mean = 0
-    healthy_blob_b_mean = 0
 
     blob_index = -1
 
-    stage_one_bad_thresholds = [(20, 100, -4, 127, 2, 128)]
-
-    for blob_index, stage_one_bad_blob in enumerate(img.find_blobs(stage_one_bad_thresholds, pixels_threshold=100, area_threshold=100, merge = False, margin = 15)):
-        rect_stats = img.get_statistics(roi = stage_one_bad_blob.rect())
+    for blob_index, stage_one_bad_blob in enumerate(img.find_blobs(stage_one_bad_thresholds, pixels_threshold=200, area_threshold=200, merge = False, margin = 15)):
+        blob_hist = img.get_histogram(roi = (stage_one_bad_blob[0], stage_one_bad_blob[1], stage_one_bad_blob[2], stage_one_bad_blob[3]))
+        blob_stats = blob_hist.get_statistics()
 
         print("stage_one_bad_blob: " + str(stage_one_bad_blob))
         print("density: " + str(stage_one_bad_blob.density()))
-        print("full: " + str(rect_stats))
-        unhealthy_full_l_mean += rect_stats[0]
-        unhealthy_full_a_mean += rect_stats[8]
-        unhealthy_full_b_mean += rect_stats[16]
+        print("full: " + str(blob_stats))
+        unhealthy_full_l_mean += blob_stats[0]
+        unhealthy_full_a_mean += blob_stats[8]
+        unhealthy_full_b_mean += blob_stats[16]
 
         side_l = stage_one_bad_blob.density() * min(stage_one_bad_blob[2], stage_one_bad_blob[3])
 
         partial_hist = img.get_histogram(roi = (stage_one_bad_blob.cx() - round(side_l/2), stage_one_bad_blob.cy() - round(side_l/2), round(side_l), round(side_l)))
         partial_stats = partial_hist.get_statistics()
         print("partial: "+ str(partial_stats))
+        print("\n")
         unhealthy_centroid_l_mean += partial_stats[0]
         unhealthy_centroid_a_mean += partial_stats[8]
         unhealthy_centroid_b_mean += partial_stats[16]
 
-        blob_stats = img.get_statistics(roi = stage_one_bad_blob.rect(), thresholds = stage_one_bad_thresholds)
-        print("blob: "+ str(blob_stats))
-        print("\n")
-
-        unhealthy_blob_l_mean += blob_stats[0]
-        unhealthy_blob_a_mean += blob_stats[8]
-        unhealthy_blob_b_mean += blob_stats[16]
-
-        img.draw_rectangle(stage_one_bad_blob.rect(), color = (255, 255, 255)) #purple
-        #img.draw_rectangle((stage_one_bad_blob.cx() - round(side_l/2), stage_one_bad_blob.cy() - round(side_l/2), round(side_l), round(side_l)), color = (255, 85, 0))
+        img.draw_rectangle(stage_one_bad_blob.rect(), color = (255, 0, 255)) #purple
+        img.draw_rectangle((stage_one_bad_blob.cx() - round(side_l/2), stage_one_bad_blob.cy() - round(side_l/2), round(side_l), round(side_l)), color = (255, 85, 0))
 
     if blob_index != -1:
         unhealthy_full_l_mean = unhealthy_full_l_mean/(blob_index + 1)
@@ -153,9 +141,6 @@ if __name__ == "__main__":
         unhealthy_centroid_l_mean = unhealthy_centroid_l_mean/(blob_index + 1)
         unhealthy_centroid_a_mean = unhealthy_centroid_a_mean/(blob_index + 1)
         unhealthy_centroid_b_mean = unhealthy_centroid_b_mean/(blob_index + 1)
-        unhealthy_blob_l_mean = unhealthy_blob_l_mean/(blob_index + 1)
-        unhealthy_blob_a_mean = unhealthy_blob_a_mean/(blob_index + 1)
-        unhealthy_blob_b_mean = unhealthy_blob_b_mean/(blob_index + 1)
 
 
     print("------------------------------------------------------------------------")
@@ -165,39 +150,32 @@ if __name__ == "__main__":
     ########### FIND GOOD BLOBS
 
     #stage_one_good_thresholds = [(img_stats.l_mean() - 1, 100, -127, img_stats.a_mean() - 4, img_stats.b_mean() - 8, 60)]
-    stage_one_good_thresholds = [(30, 100, -127, -3, -15, 3)]
+    stage_one_good_thresholds = [(30, 100, -127, 0, -10, 10)]
 
-    for blob_index, stage_one_good_blob in enumerate(img.find_blobs(stage_one_good_thresholds, pixels_threshold=100, area_threshold=100, merge = False, margin = 15)):
-        rect_stats = img.get_statistics(roi = stage_one_good_blob.rect())
+    for blob_index, stage_one_good_blob in enumerate(img.find_blobs(stage_one_good_thresholds, pixels_threshold=200, area_threshold=200, merge = False, margin = 15)):
+        blob_hist = img.get_histogram(roi = (stage_one_good_blob[0], stage_one_good_blob[1], stage_one_good_blob[2], stage_one_good_blob[3]))
+        blob_stats = blob_hist.get_statistics()
 
 
         print("stage_one_good_blob: " + str(stage_one_good_blob))
         print("density: " + str(stage_one_good_blob.density()))
-        print("full: "+ str(rect_stats))
-        healthy_full_l_mean += rect_stats[0]
-        healthy_full_a_mean += rect_stats[8]
-        healthy_full_b_mean += rect_stats[16]
+        print("full: "+ str(blob_stats))
+        healthy_full_l_mean += blob_stats[0]
+        healthy_full_a_mean += blob_stats[8]
+        healthy_full_b_mean += blob_stats[16]
 
         side_l = stage_one_good_blob.density() * min(stage_one_good_blob[2], stage_one_good_blob[3])
 
         partial_hist = img.get_histogram(roi = (stage_one_good_blob.cx() - round(side_l/2), stage_one_good_blob.cy() - round(side_l/2), round(side_l), round(side_l)))
         partial_stats = partial_hist.get_statistics()
         print("partial: "+ str(partial_stats))
-
+        print("\n")
         healthy_centroid_l_mean += partial_stats[0]
         healthy_centroid_a_mean += partial_stats[8]
         healthy_centroid_b_mean += partial_stats[16]
 
-        blob_stats = img.get_statistics(roi = stage_one_good_blob.rect(), thresholds = stage_one_good_thresholds)
-        print("blob: "+ str(blob_stats))
-        print("\n")
-
-        healthy_blob_l_mean += blob_stats[0]
-        healthy_blob_a_mean += blob_stats[8]
-        healthy_blob_b_mean += blob_stats[16]
-
-        img.draw_rectangle(stage_one_good_blob.rect(), color = (0, 0, 0)) #yellow
-        #img.draw_rectangle((stage_one_good_blob.cx() - round(side_l/2), stage_one_good_blob.cy() - round(side_l/2), round(side_l), round(side_l)), color = (255, 85, 0))
+        img.draw_rectangle(stage_one_good_blob.rect(), color = (255, 255, 0)) #yellow
+        img.draw_rectangle((stage_one_good_blob.cx() - round(side_l/2), stage_one_good_blob.cy() - round(side_l/2), round(side_l), round(side_l)), color = (255, 85, 0))
 
         ########## COLOR IT ALL IN
 
@@ -220,32 +198,24 @@ if __name__ == "__main__":
         healthy_centroid_l_mean = healthy_centroid_l_mean/(blob_index + 1)
         healthy_centroid_a_mean = healthy_centroid_a_mean/(blob_index + 1)
         healthy_centroid_b_mean = healthy_centroid_b_mean/(blob_index + 1)
-        healthy_blob_l_mean = healthy_blob_l_mean/(blob_index + 1)
-        healthy_blob_a_mean = healthy_blob_a_mean/(blob_index + 1)
-        healthy_blob_b_mean = healthy_blob_b_mean/(blob_index + 1)
 
 
-    print(img.compress_for_ide(quality = 100))
+
+    print(img.compress_for_ide(quality = 50))
 
     print("~~~~~~~~~~~~~~~ RESULTS: ~~~~~~~~~~~~~~~~")
     print("unhealthy full l mean: " + str(unhealthy_full_l_mean))
     print("unhealthy full a mean: " + str(unhealthy_full_a_mean))
     print("unhealthy full b mean: " + str(unhealthy_full_b_mean))
-    #print("unhealthy centroid l mean: " + str(unhealthy_centroid_l_mean))
-    #print("unhealthy centroid a mean: " + str(unhealthy_centroid_a_mean))
-    #print("unhealthy centroid b mean: " + str(unhealthy_centroid_b_mean))
-    print("unhealthy blob l mean: " + str(unhealthy_blob_l_mean))
-    print("unhealthy blob a mean: " + str(unhealthy_blob_a_mean))
-    print("unhealthy blob b mean: " + str(unhealthy_blob_b_mean))
+    print("unhealthy centroid l mean: " + str(unhealthy_centroid_l_mean))
+    print("unhealthy centroid a mean: " + str(unhealthy_centroid_a_mean))
+    print("unhealthy centroid b mean: " + str(unhealthy_centroid_b_mean))
     print("healthy full l mean: " + str(healthy_full_l_mean))
     print("healthy full a mean: " + str(healthy_full_a_mean))
     print("healthy full b mean: " + str(healthy_full_b_mean))
-    #print("healthy centroid l mean: " + str(healthy_centroid_l_mean))
-    #print("healthy centroid a mean: " + str(healthy_centroid_a_mean))
-    #print("healthy centroid b mean: " + str(healthy_centroid_b_mean))
-    print("healthy blob l mean: " + str(healthy_blob_l_mean))
-    print("healthy blob a mean: " + str(healthy_blob_a_mean))
-    print("healthy blob b mean: " + str(healthy_blob_b_mean))
+    print("healthy centroid l mean: " + str(healthy_centroid_l_mean))
+    print("healthy centroid a mean: " + str(healthy_centroid_a_mean))
+    print("healthy centroid b mean: " + str(healthy_centroid_b_mean))
 
 
 
