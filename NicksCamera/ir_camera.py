@@ -1,54 +1,95 @@
-import sensor, image, time
+import sensor, image, time, pyb, ustruct
 
-def set_custom_exposure(high_mean_thresh = 100, low_mean_thresh = 90):
-    try:
-        print("Starting Exposure Adjustment...")
-        b_gain = sensor.__read_reg(0x01)
-        r_gain = sensor.__read_reg(0x02)
-        g_gain = sensor.__read_reg(0x03)
-        r_gain = round(r_gain/3)
-        g_gain = round(g_gain/3)
-        b_gain = round(b_gain/3)
-        sensor.__write_reg(0x01, b_gain)
-        sensor.__write_reg(0x02, r_gain)
-        sensor.__write_reg(0x03, g_gain)
+# leafcount = (healthy, unhealthy): average of color and IR leaf count, possibly just IR
+def send_msg_type(send_type_str = "none"):
+    send_type_bytes = send_type_str.encode('ascii')
+    success = False
+    packed_data = ustruct.pack("<s", send_type_bytes)
 
-        img = sensor.snapshot()         # Take a picture and return the image.
-        img_stats = img.get_statistics()
-        mean = img_stats.mean()
-        count = 0
-        cur_gain = sensor.__read_reg(0x00)
+    # Send message type over i2c with 5 attempts, each attempt having it's own timeout
+    while success == False and attempts < 5:
+        print("Sending message type. attempt # " + i)
+        # Attempt to send packed data with 5 second timeout
+        try:
+            attempts = attempts + 1
+            i2c_obj.send(packed_data,timeout=5000)
+            print("Data sent...")
+            success = True
+        except OSError as err:
+            print("Error: " + str(err))
+            pass # Don't care about errors - so pass.
+            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
+            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
+    if success == False:
+        return -1
+    return 1
 
-        while(((mean > high_mean_thresh) | (mean < low_mean_thresh))) & (count < 1000):
+def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_string = "none"):
 
-            img = sensor.snapshot()         # Take a picture and return the image.
-            img_stats = img.get_statistics()
-            mean = img_stats.mean()
+    success = send_msg_type(send_type_str = "data")
+    if success == False:
+        return -1
 
-            print("current gain: " + str(cur_gain))
-            print("mean: " + str(mean))
+    attempts = 0
+    success = False
+    warning_bytes = warning_string.encode('ascii')
+    packed_data = ustruct.pack("<6is", leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
 
-            if mean > high_mean_thresh:
-                new_gain = cur_gain - 1
-            elif mean < low_mean_thresh:
-                new_gain = cur_gain + 1
-            else:
-                break #we're in the range now!
+    # Send data over i2c with 5 attempts, each attempt having it's own timeout
+    while success == False and attempts < 5:
+        print("Sending data. attempt # " + i)
+        # Attempt to send packed data with 5 second timeout
+        try:
+            attempts = attempts + 1
+            i2c_obj.send(packed_data,timeout=5000)
+            print("Data sent...")
+            success = True
+        except OSError as err:
+            print("Error: " + str(err))
+            pass # Don't care about errors - so pass.
+            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
+            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
+    if success == False:
+        return -1
 
-            sensor.__write_reg(0x00, new_gain)
-            cur_gain = new_gain
-            count += 1
+    return 1
 
-        if count < 1000:
-            print("Exposure Adjustment Complete.")
-            return mean
-        else:
-            print("Exposure Adjustment Incomplete.")
-            return -1
+def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_string = "none"):
 
-    except:
-        print("Error occured!")
-        return -2
+    success = send_msg_type(send_type_str = "calibration")
+    if success == False:
+        return -1
+
+    attempts = 0
+    success = False
+    warning_bytes = warning_string.encode('ascii')
+    packed_data = ustruct.pack("<5is", overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure, warning_bytes)
+
+    # Send data over i2c with 5 attempts, each attempt having it's own timeout
+    while success == False and attempts < 5:
+        print("Sending calibration. attempt # " + i)
+        # Attempt to send packed data with 5 second timeout
+        try:
+            attempts = attempts + 1
+            i2c_obj.send(packed_data,timeout=5000)
+            print("Data sent...")
+            success = True
+        except OSError as err:
+            print("Error: " + str(err))
+            pass # Don't care about errors - so pass.
+            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
+            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
+    if success == False:
+        return -1
+
+    return 1
+
+def send_trigger():
+    success = send_msg_type(send_type_str = "trigger")
+    if success == False:
+        return -1
+
+    return 1
 
 if __name__ == "__main__":
 
@@ -64,30 +105,9 @@ if __name__ == "__main__":
     sensor.set_auto_whitebal(False, rgb_gain_db = (4,4,4)) # must be turned off for color tracking
     sensor.set_auto_exposure(False, exposure_us = 4200)
 
-    #set_mean = set_custom_exposure() #default thresholds
-
-    #sensor.reset()
-    #sensor.set_pixformat(sensor.GRAYSCALE)
-    #sensor.set_framesize(sensor.QVGA)
-    #sensor.skip_frames(time = 2000)
-    #sensor.set_auto_gain(False, gain_db = 18) # must be turned off for color tracking
-    #sensor.set_auto_whitebal(False) # must be turned off for color tracking
-    #sensor.set_auto_exposure(False, exposure_us = 420)
-    #clock = time.clock()
-
-
-    #l_red = pyb.LED(1)
-    #l_green = pyb.LED(2)
-    #l_blue = pyb.LED(3)
-    #l_IR = pyb.LED(4)
-
-    #l_red.on() #red heartbeat
-    #time.sleep(200)
-    #l_red.off() #red heartbeat
-
-    #l_green.on() #green heartbeat
-    #time.sleep(200)
-    #l_green.off() #green heartbeat
+    i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
+    i2c_obj.deinit() # Fully reset I2C device...
+    i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
 
     img = sensor.snapshot()         # Take a picture and return the image.
 
