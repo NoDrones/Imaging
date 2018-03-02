@@ -1,95 +1,104 @@
 import sensor, image, time, pyb, ustruct
 
-# leafcount = (healthy, unhealthy): average of color and IR leaf count, possibly just IR
-def send_msg_type(send_type_str = "none"):
-    send_type_bytes = send_type_str.encode('ascii')
-    success = False
-    packed_data = ustruct.pack("<s", send_type_bytes)
+#################
+# This send function takes packed data, calculates the size, sends that first, then sends the data
+# This means the receiver is always looking for a format "<i" before next_msg_format
 
-    # Send message type over i2c with 5 attempts, each attempt having it's own timeout
-    while success == False and attempts < 5:
-        print("Sending message type. attempt # " + i)
-        # Attempt to send packed data with 5 second timeout
-        try:
-            attempts = attempts + 1
-            i2c_obj.send(packed_data,timeout=5000)
-            print("Data sent...")
-            success = True
-        except OSError as err:
-            print("Error: " + str(err))
-            pass # Don't care about errors - so pass.
-            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
-            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
-    if success == False:
-        return -1
-    return 1
+def send_packed_msg(packed_msg, max_attempts = 5):
 
-def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_string = "none"):
-
-    success = send_msg_type(send_type_str = "data")
-    if success == False:
-        return -1
+    packed_next_msg_size = ustruct.pack("<i", packed_msg.calcsize())
+    msg_list = [packed_next_msg_size, packed_msg]
 
     attempts = 0
-    success = False
-    warning_bytes = warning_string.encode('ascii')
-    packed_data = ustruct.pack("<6is", leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
+    for msg in msg_list
+        while success == False and attempts < max_attempts:
+            print("Sending message. Attempt # %i" % attempt)
+            # Attempt to send packed data with 5 second timeout
+            try:
+                attempts = attempts + 1
+                i2c_obj.send(msg,timeout=5000)
+                print("Message sent...")
+                success = True
+            except OSError as err:
+                print("Error: " + str(err))
+                pass # Don't care about errors - so pass.
+                # Note that there are 3 possible errors. A timeout error, a general purpose error, or
+                # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
 
-    # Send data over i2c with 5 attempts, each attempt having it's own timeout
-    while success == False and attempts < 5:
-        print("Sending data. attempt # " + i)
-        # Attempt to send packed data with 5 second timeout
-        try:
-            attempts = attempts + 1
-            i2c_obj.send(packed_data,timeout=5000)
-            print("Data sent...")
-            success = True
-        except OSError as err:
-            print("Error: " + str(err))
-            pass # Don't care about errors - so pass.
-            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
-            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
-    if success == False:
-        return -1
-
+        if success == False:
+            return -1
     return 1
 
-def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_string = "none"):
+#################
+# Default next_msg_format_str is the one used to unpack this message
+# Default next_msg_type_str is the one that matches this message
 
-    success = send_msg_type(send_type_str = "calibration")
+def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<s"):
+
+    next_msg_type_bytes = next_msg_type_str.encode('ascii')
+    next_msg_format_bytes = next_msg_format_str.encode('ascii')
+
+    # Both receiver and sender should always append an additional string and integer to the format
+    # This will always be the expected format str and byte size for the next message
+    packed_next_msg_format = ustruct.pack("<ssi", next_msg_type_bytes, next_msg_format_bytes)
+
+    return send_packed_msg(packed_msg = packed_next_msg_format)
+
+#################
+# In general you shouldn't specify next_msg_format_str - as long as we always call send_msg_format()
+# at the begining of each communication it is unneccesary. Only specify this variable if you plan on
+# sending a custom message without calling send_msg_format() first.
+
+def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0,
+                warning_str = "none", next_msg_format_str = "<s", next_msg_size_bytes = 32):
+
+    format_str = "<6is"
+    success = send_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
     if success == False:
         return -1
 
-    attempts = 0
-    success = False
-    warning_bytes = warning_string.encode('ascii')
-    packed_data = ustruct.pack("<5is", overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure, warning_bytes)
+    warning_bytes = warning_str.encode('ascii')
 
-    # Send data over i2c with 5 attempts, each attempt having it's own timeout
-    while success == False and attempts < 5:
-        print("Sending calibration. attempt # " + i)
-        # Attempt to send packed data with 5 second timeout
-        try:
-            attempts = attempts + 1
-            i2c_obj.send(packed_data,timeout=5000)
-            print("Data sent...")
-            success = True
-        except OSError as err:
-            print("Error: " + str(err))
-            pass # Don't care about errors - so pass.
-            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
-            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
+    # Always add additional str for the next_msg_format_str
+    packed_data = ustruct.pack(format_str + "s", leaf_count[0], leaf_count[1],
+                                leaf_health[0], leaf_health[1], plant_ndvi, plant_ir,
+                                warning_bytes, next_msg_format_str)
+
+    return send_packed_msg(packed_msg = packed_data)
+
+#################
+# In general you shouldn't specify next_msg_format_str - as long as we always call send_msg_format()
+# at the begining of each communication it is unneccesary. Only specify this variable if you plan on
+# sending a custom message without calling send_msg_format() first.
+
+def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"
+                        next_msg_format_str = "<s"):
+
+    format_str = "<5is"
+    success = send_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
     if success == False:
         return -1
 
-    return 1
+    warning_bytes = warning_str.encode('ascii')
+    packed_calibration = ustruct.pack(format_str + "s", overall_gain, rgb_gain[0],
+                                rgb_gain[1], rgb_gain[2], exposure, warning_bytes,
+                                next_msg_format_str)
+
+    return send_packed_msg(packed_msg = packed_calibration)
+
+#################
+# I might want to end up just using a ISR on a GPIO pin for this... but interrupts in uPython feels
+# like using a fireplace to reflow a PCB, sure it might be possible, but there will be a lot of
+# smoke and we probably shouldn't trust whatever comes out
 
 def send_trigger():
-    success = send_msg_type(send_type_str = "trigger")
+    # Don't need to specify a next_msg_format_str because this message is treated differently
+    success = send_msg_format(next_msg_type_str = "trigger")
     if success == False:
         return -1
 
     return 1
+#################
 
 if __name__ == "__main__":
 
@@ -108,6 +117,9 @@ if __name__ == "__main__":
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
     i2c_obj.deinit() # Fully reset I2C device...
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
+
+
+    while pyb.I2C(
 
     img = sensor.snapshot()         # Take a picture and return the image.
 
