@@ -1,15 +1,46 @@
 #Author: Calvin Ryan
 import sensor, image, time, pyb, ustruct
 
+
+def get_gain():
+    gain_reg_val = sensor.__read_reg(0x00)
+    #print("gain_reg_val: " + str(gain_reg_val))
+    bitwise_gain_range = (gain_reg_val & 0b11110000) >> 4
+    #print("bitwise_gain_range: " + str(bin(bitwise_gain_range)))
+    gain_range = ((bitwise_gain_range & 0b1000) >> 3) + ((bitwise_gain_range & 0b0100) >> 2) + ((bitwise_gain_range & 0b0010) >> 1) + (bitwise_gain_range & 0b0001)
+    #print("read_gain_range: " + str(gain_range))
+    gain_LSBs = gain_reg_val & 0b00001111
+    #print("gain_LSBs: " + str(gain_LSBs))
+    gain_curve_index = 16 * gain_range + gain_LSBs
+    #print("gain_curve_index: " + str(gain_curve_index))
+    gain = 10 ** (30 * gain_curve_index / 79 / 20) #10** = 10^
+    #print("gain: " + str(gain))
+    return gain
+
+def set_gain(gain_db):
+    # gain_correlation_equation = 20*log(gain_db) = 30*(index)/79
+    gain_curve_index = (79 * 20 * math.log(gain_db, 10)) / 30
+    #print("gain_curve_index: " + str(gain_curve_index))
+    gain_range = int(gain_curve_index/16)
+    #print("gain_range: " + str(gain_range))
+    gain_LSBs = int(gain_curve_index - 16 * gain_range) & 0b00001111
+    #print("gain_LSBs: " + str(bin(gain_LSBs)))
+    bitwise_gain_range = (0b1111 << gain_range) & 0b11110000
+    #print("bitwise_gain_range: " + str(bin(bitwise_gain_range)))
+    gain_reg_val = bitwise_gain_range | gain_LSBs
+    #print("gain to set: " + str(bin(gain_reg_val)))
+    sensor.__write_reg(0x00, gain_reg_val)
+    return gain_reg_val
+
 def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
     try:
         print("Starting Exposure Adjustment...")
         b_gain = sensor.__read_reg(0x01)
         r_gain = sensor.__read_reg(0x02)
         g_gain = sensor.__read_reg(0x03)
-        r_gain = round(r_gain/6)
-        g_gain = round(g_gain/6)
-        b_gain = round(b_gain/6)
+        r_gain = round(r_gain/4)
+        g_gain = round(g_gain/4)
+        b_gain = round(b_gain/4)
         sensor.__write_reg(0x01, b_gain)
         sensor.__write_reg(0x02, r_gain)
         sensor.__write_reg(0x03, g_gain)
@@ -18,9 +49,8 @@ def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
         img_stats = img.get_statistics()
         l_mean = img_stats.l_mean()
         count = 0
-        print("7: " + str(sensor.__read_reg(0x00) & 0b10000000))
-        ceiling = (sensor.__read_reg(0x00) & 0b01110000) #0b00010000
-        cur_gain = sensor.__read_reg(0x00) & 0b00001111
+
+        gain = ceiling * cur_gain
 
         while(((l_mean > high_l_mean_thresh) | (l_mean < low_l_mean_thresh))) & (count < 256) & (cur_gain >= 0):
 
@@ -34,16 +64,20 @@ def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
 
             if l_mean > high_l_mean_thresh:
                 if cur_gain == 0:
-                    ceiling -= 1
+                    ceiling -= 16
                 new_gain = (cur_gain - 1) & 0b00001111
                 send = new_gain | ceiling
             elif l_mean < low_l_mean_thresh:
                 if cur_gain == 15:
-                    ceiling += 1
+                    ceiling += 16
                 new_gain = (cur_gain + 1) & 0b00001111
                 send = new_gain | ceiling
             else:
                 break #we're in the range now!
+
+            if (cur_gain < 0) | (ceiling < 0):
+                print("Exposure Adjustment Incomplete.")
+                return -1
 
             sensor.__write_reg(0x00, send)
             cur_gain = new_gain
@@ -82,16 +116,10 @@ if __name__ == "__main__":
         img = sensor.snapshot()
         t_elapsed = time.ticks() - t_start
 
-    print("before: " + str(sensor.__read_reg(0x00)))
-    print("7: " + str(sensor.__read_reg(0x00) & 0b10000000))
-
-    sensor.set_auto_gain(True) # must be turned off for color tracking
+    sensor.set_auto_gain(False) # must be turned off for color tracking
     sensor.set_auto_whitebal(False) # must be turned off for color tracking
     sensor.set_auto_exposure(False)
     sensor.set_contrast(+3)
-
-    print("after: " + str(sensor.__read_reg(0x00)))
-    print("7: " + str(sensor.__read_reg(0x00) & 0b10000000))
 
     print()
     pre_adjust_r_gain = sensor.__read_reg(0x02)
