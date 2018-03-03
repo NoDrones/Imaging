@@ -6,16 +6,17 @@ import sensor, image, time, pyb, ustruct
 
 def send_packed_msg(packed_msg, max_attempts = 5):
 
-    packed_next_msg_size = ustruct.pack("<i", packed_msg.calcsize())
+    # alternative for size calcs incase this doesnt work `PyBytes_Size(packed_msg)`
+    packed_next_msg_size = ustruct.pack("<i", packed_msg.size())
     msg_list = [packed_next_msg_size, packed_msg]
 
-    attempts = 0
     for msg in msg_list
+        attempts = 0
         while success == False and attempts < max_attempts:
             print("Sending message. Attempt # %i" % attempt)
             # Attempt to send packed data with 5 second timeout
+            attempts = attempts + 1
             try:
-                attempts = attempts + 1
                 i2c_obj.send(msg,timeout=5000)
                 print("Message sent...")
                 success = True
@@ -50,7 +51,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<s
 # sending a custom message without calling send_msg_format() first.
 
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0,
-                warning_str = "none", next_msg_format_str = "<s", next_msg_size_bytes = 32):
+                warning_str = "none", next_msg_format_str = "<ss":
 
     format_str = "<6is"
     success = send_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
@@ -59,8 +60,9 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 
     warning_bytes = warning_str.encode('ascii')
 
-    # Always add additional str for the next_msg_format_str
-    packed_data = ustruct.pack(format_str + "s", leaf_count[0], leaf_count[1],
+    if !next_msg_format_str.endswith("s"):
+        print("Warning: next_msg_format_str doesn't end with an s, receiver will default to <s")
+    packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1],
                                 leaf_health[0], leaf_health[1], plant_ndvi, plant_ir,
                                 warning_bytes, next_msg_format_str)
 
@@ -69,7 +71,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 #################
 # In general you shouldn't specify next_msg_format_str - as long as we always call send_msg_format()
 # at the begining of each communication it is unneccesary. Only specify this variable if you plan on
-# sending a custom message without calling send_msg_format() first.
+# sending a custom message after without calling send_msg_format() first.
 
 def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"
                         next_msg_format_str = "<s"):
@@ -98,6 +100,93 @@ def send_trigger():
         return -1
 
     return 1
+
+#################
+# This function was designed to receive a format string and return the unpacked tuple.
+# To listen and wait for direction from the sender simply call listen_for_msg and specify a
+# long wait_time, without a format_str argument you should expect to receive back a two string
+# tuple, with the first string specifying a type or delivering a message, and the second string
+# specifying the next_msg_format_str that should be used upon calling listen_for_msg() again.
+#
+# 1st msg_stage receives a 4 byte integer specifying the next message size
+# 2nd msg_stage recursively returns the next packed_data, which the 1st msg_stage unpacks
+# based on the format_str specifier it was given, and returns the tuple
+
+def listen_for_msg(format_str = "<ss", msg_size_bytes = 4, msg_stage = 1, wait_time = 30000):
+
+    i2c_data = bytearray(msg_size_bytes)
+    success = False
+    t_start = time.ticks()
+
+    while elapsed_time < (wait_time / 2) and success == False:
+        try:
+            i2c_obj.recv(i2c_data, timeout = 5000)
+            print("Received data")
+            success = True
+        except OSError as err:
+            print("Error: " + str(err))
+        elapsed_time = time.ticks() - t_start
+
+    if success == False:
+        return -1
+
+    if msg_stage = 1:
+        next_msg_size_bytes = int(ustruct.unpack("<i", i2c_data))
+        packed_msg = listen_for_msg(msg_size_bytes = next_msg_size_bytes, msg_stage = 2)
+        # If an error occured in stage 2, exit stage 1
+        if packed_msg == -1:
+            return -1
+        return ustruct.unpack(format_str, packed_msg)
+
+    if msg_stage = 2:
+        return i2c_data
+
+#################
+# This function is responsible for receiving messages and carrying out commands
+
+def receive_msg()
+    # Before you know what you're receiving call this function, expecting the first communication
+    # to contain details about the 2nd communication
+    next_msg_type_bytes, next_msg_format_bytes = listen_for_msg()
+    next_msg_type_str = next_msg_type_bytes.decode("ascii")
+    next_msg_format_str = next_msg_format_bytes.decode("ascii")
+
+    if next_msg_type_str == "calibration":
+        # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure,
+        # warning_bytes, next_msg_format_str
+        calibration_tuple = listen_for_msg(format_str = next_msg_format_str)
+        #### CALL CALIBRATION FUNCTION ####
+        # Check for warnings
+        if calibration_tuple[6] != "none"
+            print("Calibration Warning: " + calibration_tuple[6])
+        # return the next_msg_format_str
+        # should evaluate this, and if it's not "<s" you better be ready to send something else
+        next_msg_format = calibration_tuple[7]
+        if !next_msg_format.endswith("s"):
+            print("Warning: the next ")
+        return calibration_tuple[7]
+
+    elif next_msg_type_str == "data":
+        # data tuple structure: leaf_count_h, leaf_count_u, leaf_health_h, leaf_health_u,
+        # plant_ndvi, plant_ir, warning_bytes, next_msg_format_str
+        data_tuple = listen_for_msg(format_str = next_msg_format_str)
+        #### CALL DATA LOGGING FUNCTION ####
+        # Check for warnings
+        if data_tuple[7] != "none"
+            print("Data Warning: " + data_tuple[6])
+        # return the next_msg_format_str
+        # should evaluate this, and if it's not "<s" you better be ready to send something else
+        return data_tuple[8]
+
+    elif next_msg_type_str == "trigger":
+        #### CALL TRIGGER FUNCTION ####
+        return 1
+
+    # If we don't recognize the next_msg_type_str, print it and return the tuple
+    else:
+        print("Unrecognized message type: " + next_msg_type_str)
+        return (next_msg_type_str, listen_for_msg(format_str = next_msg_format_str))
+
 #################
 
 if __name__ == "__main__":
@@ -118,8 +207,6 @@ if __name__ == "__main__":
     i2c_obj.deinit() # Fully reset I2C device...
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
 
-
-    while pyb.I2C(
 
     img = sensor.snapshot()         # Take a picture and return the image.
 
