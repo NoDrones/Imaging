@@ -41,7 +41,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<s
 
     # Both receiver and sender should always append an additional string and integer to the format
     # This will always be the expected format str and byte size for the next message
-    packed_next_msg_format = ustruct.pack("<ssi", next_msg_type_bytes, next_msg_format_bytes)
+    packed_next_msg_format = ustruct.pack("<ss", next_msg_type_bytes, next_msg_format_bytes)
 
     return send_packed_msg(packed_msg = packed_next_msg_format)
 
@@ -50,8 +50,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<s
 # at the begining of each communication it is unneccesary. Only specify this variable if you plan on
 # sending a custom message without calling send_msg_format() first.
 
-def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0,
-                warning_str = "none", next_msg_format_str = "<ss":
+def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
 
     format_str = "<6is"
     success = send_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
@@ -60,11 +59,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 
     warning_bytes = warning_str.encode('ascii')
 
-    if !next_msg_format_str.endswith("s"):
-        print("Warning: next_msg_format_str doesn't end with an s, receiver will default to <s")
-    packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1],
-                                leaf_health[0], leaf_health[1], plant_ndvi, plant_ir,
-                                warning_bytes, next_msg_format_str)
+    packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
 
     return send_packed_msg(packed_msg = packed_data)
 
@@ -73,8 +68,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 # at the begining of each communication it is unneccesary. Only specify this variable if you plan on
 # sending a custom message after without calling send_msg_format() first.
 
-def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"
-                        next_msg_format_str = "<s"):
+def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"):
 
     format_str = "<5is"
     success = send_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
@@ -82,9 +76,7 @@ def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warni
         return -1
 
     warning_bytes = warning_str.encode('ascii')
-    packed_calibration = ustruct.pack(format_str + "s", overall_gain, rgb_gain[0],
-                                rgb_gain[1], rgb_gain[2], exposure, warning_bytes,
-                                next_msg_format_str)
+    packed_calibration = ustruct.pack(format_str + "s", overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure, warning_bytes)
 
     return send_packed_msg(packed_msg = packed_calibration)
 
@@ -98,6 +90,10 @@ def send_trigger():
     success = send_msg_format(next_msg_type_str = "trigger")
     if success == False:
         return -1
+
+    #### TRIGGER LIGHT SOURCE ####
+    print("Light source triggered")
+    #### TRIGGER LIGHTSOURCE ####
 
     return 1
 
@@ -128,6 +124,7 @@ def listen_for_msg(format_str = "<ss", msg_size_bytes = 4, msg_stage = 1, wait_t
         elapsed_time = time.ticks() - t_start
 
     if success == False:
+        print("Listening failed")
         return -1
 
     if msg_stage = 1:
@@ -146,46 +143,50 @@ def listen_for_msg(format_str = "<ss", msg_size_bytes = 4, msg_stage = 1, wait_t
 
 def receive_msg()
     # Before you know what you're receiving call this function, expecting the first communication
-    # to contain details about the 2nd communication
+    # to contain details about the 2nd communication. The assumption is this first communication is
+    # formatted as '<ss'. If you want to try for longer, specify a longer wait_time.
+    print("Listening...")
     next_msg_type_bytes, next_msg_format_bytes = listen_for_msg()
     next_msg_type_str = next_msg_type_bytes.decode("ascii")
     next_msg_format_str = next_msg_format_bytes.decode("ascii")
 
     if next_msg_type_str == "calibration":
+        print("Calibration message incoming...")
         # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure,
-        # warning_bytes, next_msg_format_str
+        # warning_bytes
         calibration_tuple = listen_for_msg(format_str = next_msg_format_str)
+        #### CALL CALIBRATION FUNCTION ####
+        print("Calibration tuple: ", calibration_tuple)
         #### CALL CALIBRATION FUNCTION ####
         # Check for warnings
         if calibration_tuple[6] != "none"
             print("Calibration Warning: " + calibration_tuple[6])
-        # return the next_msg_format_str
-        # should evaluate this, and if it's not "<s" you better be ready to send something else
-        next_msg_format = calibration_tuple[7]
-        if !next_msg_format.endswith("s"):
-            print("Warning: the next ")
-        return calibration_tuple[7]
+        return (next_msg_type_str)
 
     elif next_msg_type_str == "data":
+        print("Data message incoming...")
         # data tuple structure: leaf_count_h, leaf_count_u, leaf_health_h, leaf_health_u,
-        # plant_ndvi, plant_ir, warning_bytes, next_msg_format_str
+        # plant_ndvi, plant_ir, warning_bytes
         data_tuple = listen_for_msg(format_str = next_msg_format_str)
+        #### CALL DATA LOGGING FUNCTION ####
+        print("Data tuple: ", data_tuple)
         #### CALL DATA LOGGING FUNCTION ####
         # Check for warnings
         if data_tuple[7] != "none"
-            print("Data Warning: " + data_tuple[6])
+            print("Data Warning: " + data_tuple[7])
         # return the next_msg_format_str
         # should evaluate this, and if it's not "<s" you better be ready to send something else
-        return data_tuple[8]
+        return (next_msg_type_str)
 
     elif next_msg_type_str == "trigger":
         #### CALL TRIGGER FUNCTION ####
-        return 1
+        return (next_msg_type_str)
 
-    # If we don't recognize the next_msg_type_str, print it and return the tuple
+    # If we don't recognize the next_msg_type_str, print it and return it so the main can handle it
     else:
         print("Unrecognized message type: " + next_msg_type_str)
-        return (next_msg_type_str, listen_for_msg(format_str = next_msg_format_str))
+        print("Incoming tuple: ", listen_for_msg(format_str = next_msg_format_str))
+        return (next_msg_type_str)
 
 #################
 
@@ -207,7 +208,22 @@ if __name__ == "__main__":
     i2c_obj.deinit() # Fully reset I2C device...
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
 
+    # Calling receive_message will also trigger action if directed by sender, such as performing
+    # calibration, or passing on/storing data, or taking a photo/flashing the light source
+    # The returned msg_type can be used to verify the expected action took place if desired, and
+    # react if necessary (such as repeat a process)
 
+    # IR camera waits for calibration directions from the color camera
+    msg_type = receive_message()
+    if msg_type != "calibration":
+        print("Unexpected msg_type: " + msg_type)
+
+    # Trigger light source/color camera
+    if send_trigger() == -1:
+        print("Trigger unsuccessful")
+
+    # Wait 42ms and snap photo
+    time.sleep_ms(42)
     img = sensor.snapshot()         # Take a picture and return the image.
 
     '''
@@ -223,7 +239,6 @@ if __name__ == "__main__":
     #median > 40 = over lit
 
     #thresholds LAB -> [Llo, Lhi, Alo, Ahi, Blo, Bhi]
-    #stage_one_thresholds = [(0, 100, -127, -10, 0, 60)]
 
     img_hist = img.get_histogram()
     img_stats = img_hist.get_statistics()
@@ -271,6 +286,7 @@ if __name__ == "__main__":
     # calculates the average value for the healthy leaves regardless of leaf size
     if (blob_found == True):
         healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
+    healthy_leaves = (leaf_blob_index + 1)
 
     blob_found = False
 
@@ -298,12 +314,18 @@ if __name__ == "__main__":
         leaf_rect_mean = leaf_rect_stats.mean()
         leaf_mean = leaf_rect_pix_sum / leaf_area
         print("unhealthy leaf mean = %i [outer mean = %i]" % (leaf_mean, leaf_rect_mean))
-        # the below function does not take into account the size of a leaf... each leaf is weighted equally
+        # the below function does not take into account the size of a leaf... each leaf is weighted
+        # equally
         unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_mean
 
     # calculates the average value for the healthy leaves regardless of leaf size
     if (blob_found == True):
         unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
+    unhealthy_leaves = (leaf_blob_index + 1)
+
+    overall_ir =  ((healthy_leaves * healthy_mean) + (unhealthy_leaves * unhealthy_mean)) / (healthy_leaves + unhealthy_leaves)
+
+    send_data(leaf_count = (healthy_leaves, unhealthy_leaves), leaf_health = (healthy_mean, unhealthy_mean), plant_ndvi = 0, plant_ir = overall_ir, warning_str = "none")
 
     print("healthy mean = %i; unhealthy mean = %i" % (healthy_mean, unhealthy_mean))
     if (unhealthy_mean < 135):
