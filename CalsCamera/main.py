@@ -5,29 +5,29 @@ import sensor, image, time, pyb, ustruct
 def get_gain():
     gain_reg_val = sensor.__read_reg(0x00)
     #print("gain_reg_val: " + str(gain_reg_val))
-    bitwise_gain_range = (gain_reg_val & 0b11110000) >> 4
+    bitwise_gain_range = (gain_reg_val & 0b11110000) >> 4 #get the highest four bits which correspond to gain range. Depends on the bits set. Can be 0 > 4 for a total of 5 ranges.
     #print("bitwise_gain_range: " + str(bin(bitwise_gain_range)))
-    gain_range = ((bitwise_gain_range & 0b1000) >> 3) + ((bitwise_gain_range & 0b0100) >> 2) + ((bitwise_gain_range & 0b0010) >> 1) + (bitwise_gain_range & 0b0001)
+    gain_range = ((bitwise_gain_range & 0b1000) >> 3) + ((bitwise_gain_range & 0b0100) >> 2) + ((bitwise_gain_range & 0b0010) >> 1) + (bitwise_gain_range & 0b0001) #get an int for the number of bits set
     #print("read_gain_range: " + str(gain_range))
-    gain_LSBs = gain_reg_val & 0b00001111
+    gain_LSBs = gain_reg_val & 0b00001111 #The 4 lsbs represent the fine tuning gain control.
     #print("gain_LSBs: " + str(gain_LSBs))
-    gain_curve_index = 16 * gain_range + gain_LSBs
+    gain_curve_index = 16 * gain_range + gain_LSBs # this gives you an index from 0 > 79 which is the range of points you need to describe every possible gain setting along the new gain curve
     #print("gain_curve_index: " + str(gain_curve_index))
-    gain = 10 ** (30 * gain_curve_index / 79 / 20) #10** = 10^
+    gain = 10 ** (30 * gain_curve_index / 79 / 20) #10** = 10 ^, calculate the gain along the new exponential gain curve I defined earlier on
     #print("gain: " + str(gain))
     return gain
 
 def set_gain(gain_db):
     # gain_correlation_equation = 20*log(gain_db) = 30*(index)/79
-    gain_curve_index = (79 * 20 * math.log(gain_db, 10)) / 30
+    gain_curve_index = (79 * 20 * math.log(gain_db, 10)) / 30 #return an index from the new exponential gain curve. Can be 0 > 79 which is the # of points needed to describe every gain setting along the new curve
     #print("gain_curve_index: " + str(gain_curve_index))
-    gain_range = int(gain_curve_index/16)
+    gain_range = int(gain_curve_index/16) #find a 0 > 4 value for the gain range. This range is defined by the 4 msbs. Thus we divide and round down by the LSB of the 4 MSBs (16)
     #print("gain_range: " + str(gain_range))
-    gain_LSBs = int(gain_curve_index - 16 * gain_range) & 0b00001111
+    gain_LSBs = int(gain_curve_index - 16 * gain_range) & 0b00001111 #Find how many LSBs above the gain range the index is. This is your fine tuning gain control
     #print("gain_LSBs: " + str(bin(gain_LSBs)))
-    bitwise_gain_range = (0b1111 << gain_range) & 0b11110000
+    bitwise_gain_range = (0b1111 << gain_range) & 0b11110000 #make the gain range bitwise
     #print("bitwise_gain_range: " + str(bin(bitwise_gain_range)))
-    gain_reg_val = bitwise_gain_range | gain_LSBs
+    gain_reg_val = bitwise_gain_range | gain_LSBs #OR
     #print("gain to set: " + str(bin(gain_reg_val)))
     sensor.__write_reg(0x00, gain_reg_val)
     return gain_reg_val
