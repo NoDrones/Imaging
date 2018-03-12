@@ -10,7 +10,7 @@ def send_packed_msg(packed_msg, max_attempts = 5):
     packed_next_msg_size = ustruct.pack("<i", packed_msg.size())
     msg_list = [packed_next_msg_size, packed_msg]
 
-    for msg in msg_list
+    for msg in msg_list:
         attempts = 0
         while success == False and attempts < max_attempts:
             print("Sending message. Attempt # %i" % attempt)
@@ -113,6 +113,7 @@ def listen_for_msg(format_str = "<ss", msg_size_bytes = 4, msg_stage = 1, wait_t
     i2c_data = bytearray(msg_size_bytes)
     success = False
     t_start = time.ticks()
+    elapsed_time = 0
 
     while elapsed_time < (wait_time / 2) and success == False:
         try:
@@ -127,7 +128,7 @@ def listen_for_msg(format_str = "<ss", msg_size_bytes = 4, msg_stage = 1, wait_t
         print("Listening failed")
         return -1
 
-    if msg_stage = 1:
+    if msg_stage == 1:
         next_msg_size_bytes = int(ustruct.unpack("<i", i2c_data))
         packed_msg = listen_for_msg(msg_size_bytes = next_msg_size_bytes, msg_stage = 2)
         # If an error occured in stage 2, exit stage 1
@@ -135,13 +136,13 @@ def listen_for_msg(format_str = "<ss", msg_size_bytes = 4, msg_stage = 1, wait_t
             return -1
         return ustruct.unpack(format_str, packed_msg)
 
-    if msg_stage = 2:
+    if msg_stage == 2:
         return i2c_data
 
 #################
 # This function is responsible for receiving messages and carrying out commands
 
-def receive_msg()
+def receive_msg():
     # Before you know what you're receiving call this function, expecting the first communication
     # to contain details about the 2nd communication. The assumption is this first communication is
     # formatted as '<ss'. If you want to try for longer, specify a longer wait_time.
@@ -159,7 +160,7 @@ def receive_msg()
         print("Calibration tuple: ", calibration_tuple)
         #### CALL CALIBRATION FUNCTION ####
         # Check for warnings
-        if calibration_tuple[6] != "none"
+        if calibration_tuple[6] != "none":
             print("Calibration Warning: " + calibration_tuple[6])
         return (next_msg_type_str)
 
@@ -172,7 +173,7 @@ def receive_msg()
         print("Data tuple: ", data_tuple)
         #### CALL DATA LOGGING FUNCTION ####
         # Check for warnings
-        if data_tuple[7] != "none"
+        if data_tuple[7] != "none":
             print("Data Warning: " + data_tuple[7])
         # return the next_msg_format_str
         # should evaluate this, and if it's not "<s" you better be ready to send something else
@@ -214,7 +215,7 @@ if __name__ == "__main__":
     # react if necessary (such as repeat a process)
 
     # IR camera waits for calibration directions from the color camera
-    msg_type = receive_message()
+    msg_type = receive_msg()
     if msg_type != "calibration":
         print("Unexpected msg_type: " + msg_type)
 
