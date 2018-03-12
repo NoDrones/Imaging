@@ -218,6 +218,7 @@ if __name__ == "__main__":
     msg_type = receive_msg()
     if msg_type != "calibration":
         print("Unexpected msg_type: " + msg_type)
+    print(msg_type)
 
     # Trigger light source/color camera
     if send_trigger() == -1:
