@@ -4,10 +4,10 @@ import sensor, image, time, pyb, ustruct
 # This send function takes packed data, calculates the size, sends that first, then sends the data
 # This means the receiver is always looking for a format "<i" before next_msg_format
 
-def send_packed_msg(packed_msg, max_attempts = 5):
+def send_packed_msg(packed_msg, packed_msg_size, max_attempts = 5):
 
     # alternative for size calcs incase this doesnt work `PyBytes_Size(packed_msg)`
-    packed_next_msg_size = ustruct.pack("<i", packed_msg.size())
+    packed_next_msg_size = ustruct.pack("<i", packed_msg_size)
     msg_list = [packed_next_msg_size, packed_msg]
 
     for msg in msg_list:
@@ -34,16 +34,18 @@ def send_packed_msg(packed_msg, max_attempts = 5):
 # Default next_msg_format_str is the one used to unpack this message
 # Default next_msg_type_str is the one that matches this message
 
-def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<s"):
+def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<50s"):
 
     next_msg_type_bytes = next_msg_type_str.encode('ascii')
     next_msg_format_bytes = next_msg_format_str.encode('ascii')
 
     # Both receiver and sender should always append an additional string and integer to the format
     # This will always be the expected format str and byte size for the next message
-    packed_next_msg_format = ustruct.pack("<ss", next_msg_type_bytes, next_msg_format_bytes)
+    format_str = "<50s50s"
+    packed_next_msg_format = ustruct.pack(format_str, next_msg_type_bytes, next_msg_format_bytes)
 
-    return send_packed_msg(packed_msg = packed_next_msg_format)
+
+    return send_packed_msg(packed_msg = packed_next_msg_format, packed_msg_size = ustruct.calcsize(format_str))
 
 #################
 # In general you shouldn't specify next_msg_format_str - as long as we always call
@@ -52,7 +54,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<s
 
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
 
-    format_str = "<6is"
+    format_str = "<6i50s"
     success = send_next_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
     if success == False:
         return -1
@@ -61,7 +63,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 
     packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
 
-    return send_packed_msg(packed_msg = packed_data)
+    return send_packed_msg(packed_msg = packed_data, packed_msg_size = ustruct.calcsize(format_str))
 
 #################
 # In general you shouldn't specify next_msg_format_str - as long as we always call send_msg_format()
@@ -70,7 +72,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 
 def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"):
 
-    format_str = "<5is"
+    format_str = "<5i50s"
     success = send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
     if success == False:
         return -1
@@ -78,7 +80,7 @@ def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warni
     warning_bytes = warning_str.encode('ascii')
     packed_calibration = ustruct.pack(format_str + "s", overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure, warning_bytes)
 
-    return send_packed_msg(packed_msg = packed_calibration)
+    return send_packed_msg(packed_msg = packed_calibration, packed_msg_size = ustruct.calcsize(format_str))
 
 #################
 # I might want to end up just using a ISR on a GPIO pin for this... but interrupts in uPython feels
@@ -108,13 +110,16 @@ def send_trigger():
 # 2nd msg_stage recursively returns the next packed_data, which the 1st msg_stage unpacks
 # based on the format_str specifier it was given, and returns the tuple
 
-def listen_for_msg(format_str = "<ss", msg_size_bytes = 4, msg_stage = 1, wait_time = 30000):
+def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wait_time = 30000):
 
     i2c_data = bytearray(msg_size_bytes)
     success = False
     t_start = time.ticks()
     elapsed_time = 0
 
+    # Wait_time is divided by two here because this function calls itself, so the overall timeout
+    # when list_for_msg() is called will be wait_time. This isn't very good naming but I can't be
+    # bothered to deal with it.
     while elapsed_time < (wait_time / 2) and success == False:
         try:
             i2c_obj.recv(i2c_data, timeout = 5000)
@@ -186,7 +191,7 @@ def receive_msg():
     # If we don't recognize the next_msg_type_str, print it and return it so the main can handle it
     else:
         print("Unrecognized message type: " + next_msg_type_str)
-        print("Incoming tuple: ", listen_for_msg(format_str = next_msg_format_str))
+        print("Received tuple: ", listen_for_msg(format_str = next_msg_format_str))
         return (next_msg_type_str)
 
 #################
