@@ -12,8 +12,9 @@ def send_packed_msg(packed_msg, packed_msg_size, max_attempts = 5):
 
     for msg in msg_list:
         attempts = 0
+        success = False
         while success == False and attempts < max_attempts:
-            print("Sending message. Attempt # %i" % attempt)
+            print("Sending message. Attempt # %i" % attempts)
             # Attempt to send packed data with 5 second timeout
             attempts = attempts + 1
             try:
@@ -217,6 +218,16 @@ if __name__ == "__main__":
     success = send_calibration()
     print("Success??? = %d" % success)
 
+    msg_type = receive_msg()
+    if msg_type != "trigger":
+        print("Unexpected msg_type: " + str(msg_type))
+    print(msg_type)
+
+    print("Triggering photo regardless...")
+    # Wait 42ms and snap photo
+    time.sleep_ms(42)
+    img = sensor.snapshot()         # Take a picture and return the image.
+
     img_hist = img.get_histogram()
     img_stats = img_hist.get_statistics()
     #print(img.compressed_for_ide(quality = 25))
@@ -259,41 +270,6 @@ if __name__ == "__main__":
     # calculates the average value for the healthy leaves regardless of leaf size
     if (blob_found):
         a_mean = leaves_mean_a_sum / (leaf_blob_index + 1)
-
-
-    '''
-        if (abs(blob_stats.a_mean() - blob_stats.b_mean()) > 20) & (blob_stats.a_max() - blob_stats.a_min() > 20) & (blob_stats.b_max() - blob_stats.b_min() > 20): #if the a and b histograms are close together it means the color is probably white and should be discarded
-
-            img.draw_rectangle(stage_one_blob.rect(), color = 120)
-
-            l_blue.toggle()
-
-            for x in range(stage_one_blob[2]):
-                for y in range(stage_one_blob[3]):
-                    pix_location = [stage_one_blob[0] + x, stage_one_blob[1] + y]
-                    pix_vals = img.get_pixel(pix_location[0], pix_location[1])
-                    lab_pix_vals = image.rgb_to_lab(pix_vals)
-
-                    if (lab_pix_vals[1] < 0) & (abs(lab_pix_vals[2] - lab_pix_vals[1]) > 40):
-                        pass
-                    else:
-                        img.set_pixel(pix_location[0], pix_location[1], (255, 70, 255))
-
-                    if (pix_vals[0] <= 20) | (pix_vals[1] <= 20) | (pix_vals[2] <= 20):
-
-                        img.set_pixel(pix_location[0], pix_location[1], (255, 70, 255))
-
-
-
-            stage_two_thresholds = [(0, blob_stats.l_mode() + 5, blob_stats.a_mean(), 128, -127, blob_stats.b_mean())]
-
-
-
-            for stage_two_blob in img.find_blobs(stage_two_thresholds, merge = False, roi = (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3])):
-                img.draw_rectangle(stage_two_blob.rect(), color = 0)
-
-        #img.save("/blob_" + str(blob_index), 100, (stage_one_blob[0], stage_one_blob[1], stage_one_blob[2], stage_one_blob[3]))
-    '''
 
     sensor.flush()
     time.sleep(3000)

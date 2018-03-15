@@ -4,10 +4,10 @@ import sensor, image, time, pyb, ustruct
 # This send function takes packed data, calculates the size, sends that first, then sends the data
 # This means the receiver is always looking for a format "<i" before next_msg_format
 
-def send_packed_msg(packed_msg, packed_msg_size, max_attempts = 5):
+def send_packed_msg(packed_msg, max_attempts = 5):
 
     # alternative for size calcs incase this doesnt work `PyBytes_Size(packed_msg)`
-    packed_next_msg_size = ustruct.pack("<i", packed_msg_size)
+    packed_next_msg_size = ustruct.pack("<i", len(packed_msg))
     msg_list = [packed_next_msg_size, packed_msg]
 
     for msg in msg_list:
@@ -16,6 +16,7 @@ def send_packed_msg(packed_msg, packed_msg_size, max_attempts = 5):
             print("Sending message. Attempt # %i" % attempt)
             # Attempt to send packed data with 5 second timeout
             attempts = attempts + 1
+            err = 0
             try:
                 i2c_obj.send(msg, addr=0x12, timeout=5000)
                 print("Message sent...")
@@ -45,7 +46,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<5
     packed_next_msg_format = ustruct.pack(format_str, next_msg_type_bytes, next_msg_format_bytes)
 
 
-    return send_packed_msg(packed_msg = packed_next_msg_format, packed_msg_size = ustruct.calcsize(format_str))
+    return send_packed_msg(packed_msg = packed_next_msg_format)
 
 #################
 # In general you shouldn't specify next_msg_format_str - as long as we always call
@@ -55,7 +56,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<5
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
 
     format_str = "<6i50s"
-    success = send_next_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
+    success = send_next_msg_format(next_msg_type_str = "data")
     if success == False:
         return -1
 
@@ -63,7 +64,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 
     packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
 
-    return send_packed_msg(packed_msg = packed_data, packed_msg_size = ustruct.calcsize(format_str))
+    return send_packed_msg(packed_msg = packed_data)
 
 #################
 # In general you shouldn't specify next_msg_format_str - as long as we always call send_msg_format()
@@ -80,7 +81,7 @@ def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warni
     warning_bytes = warning_str.encode('ascii')
     packed_calibration = ustruct.pack(format_str + "s", overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure, warning_bytes)
 
-    return send_packed_msg(packed_msg = packed_calibration, packed_msg_size = ustruct.calcsize(format_str))
+    return send_packed_msg(packed_msg = packed_calibration)
 
 #################
 # I might want to end up just using a ISR on a GPIO pin for this... but interrupts in uPython feels
@@ -152,7 +153,17 @@ def receive_msg():
     # to contain details about the 2nd communication. The assumption is this first communication is
     # formatted as '<ss'. If you want to try for longer, specify a longer wait_time.
     print("Listening...")
-    next_msg_type_bytes, next_msg_format_bytes = listen_for_msg()
+
+    #try:
+        #next_msg_type_bytes, next_msg_format_bytes = listen_for_msg()
+    #except OSError as err:
+        #return -1
+
+    received_tuple = listen_for_msg()
+    if received_tuple == -1:
+        return -1
+    next_msg_type_bytes = received_tuple[0]
+    next_msg_format_bytes =  received_tuple[1]
     next_msg_type_str = next_msg_type_bytes.decode("ascii")
     next_msg_format_str = next_msg_format_bytes.decode("ascii")
 
@@ -222,7 +233,7 @@ if __name__ == "__main__":
     # IR camera waits for calibration directions from the color camera
     msg_type = receive_msg()
     if msg_type != "calibration":
-        print("Unexpected msg_type: " + msg_type)
+        print("Unexpected msg_type: " + str(msg_type))
     print(msg_type)
 
     # Trigger light source/color camera
