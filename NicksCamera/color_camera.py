@@ -123,7 +123,7 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
     # bothered to deal with it.
     while elapsed_time < (wait_time / 2) and success == False:
         try:
-            i2c_obj.recv(i2c_data, timeout = 5000)
+            i2c_obj.recv(i2c_data, addr =0x12, timeout = 5000)
             print("Received data")
             success = True
         except OSError as err:
