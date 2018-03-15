@@ -1,5 +1,5 @@
 #Author: Calvin Ryan
-import sensor, image, time, pyb, ustruct
+import sensor, image, time, pyb, ustruct, math
 
 
 def get_gain():
@@ -19,7 +19,8 @@ def get_gain():
 
 def set_gain(gain_db):
     # gain_correlation_equation = 20*log(gain_db) = 30*(index)/79
-    gain_curve_index = (79 * 20 * math.log(gain_db, 10)) / 30 #return an index from the new exponential gain curve. Can be 0 > 79 which is the # of points needed to describe every gain setting along the new curve
+    gain_curve_index = (79 * 20 * math.log(gain_db, 10)) / 30 #return an index from the new exponential gain curve...
+    #... Can be 0 > 79 which is the # of points needed to describe every gain setting along the new curve
     #print("gain_curve_index: " + str(gain_curve_index))
     gain_range = int(gain_curve_index/16) #find a 0 > 4 value for the gain range. This range is defined by the 4 msbs. Thus we divide and round down by the LSB of the 4 MSBs (16)
     #print("gain_range: " + str(gain_range))
@@ -50,7 +51,7 @@ def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
         l_mean = img_stats.l_mean()
         count = 0
 
-        gain = ceiling * cur_gain
+        cur_gain = get_gain()
 
         while(((l_mean > high_l_mean_thresh) | (l_mean < low_l_mean_thresh))) & (count < 256) & (cur_gain >= 0):
 
@@ -58,32 +59,21 @@ def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
             img_stats = img.get_statistics()
             l_mean = img_stats.l_mean()
 
-            print("gain_cieling: " + str(ceiling))
-            print("current gain: " + str(cur_gain))
-            print("l_mean: " + str(l_mean))
+            if ((cur_gain < 1) | (cur_gain > 32)):
+                break
 
             if l_mean > high_l_mean_thresh:
-                if cur_gain == 0:
-                    ceiling -= 16
-                new_gain = (cur_gain - 1) & 0b00001111
-                send = new_gain | ceiling
+                new_gain = cur_gain - .1
             elif l_mean < low_l_mean_thresh:
-                if cur_gain == 15:
-                    ceiling += 16
-                new_gain = (cur_gain + 1) & 0b00001111
-                send = new_gain | ceiling
+                new_gain = cur_gain + .1
             else:
                 break #we're in the range now!
 
-            if (cur_gain < 0) | (ceiling < 0):
-                print("Exposure Adjustment Incomplete.")
-                return -1
-
-            sensor.__write_reg(0x00, send)
+            set_gain(new_gain)
             cur_gain = new_gain
             count += 1
 
-        if (count < 256) | (cur_gain == 0):
+        if (count < 310) | (cur_gain == 0):
             print("Exposure Adjustment Complete.")
             return l_mean
         else:
@@ -136,7 +126,7 @@ if __name__ == "__main__":
     print('------------------------------------')
 
     set_l_mean = set_custom_exposure() #default thresholds
-
+    print(set_l_mean)
 
     post_adjust_r_gain = sensor.__read_reg(0x02)
     post_adjust_g_gain = sensor.__read_reg(0x03)
@@ -150,22 +140,6 @@ if __name__ == "__main__":
     print("Overall gain: " + str(post_adjust_overall_gain))
     print("exposure: " + str(post_adjust_exposure))
     print()
-
-    print(i2c_obj)
-    print("Beginning...")
-    packed_data = ustruct.pack("<i", post_adjust_r_gain, post_adjust_g_gain, post_adjust_b_gain, post_adjust_overall_gain, post_adjust_exposure)
-
-    while(True):
-        try:
-            i2c_obj.send(packed_data,timeout=2000)
-
-        except OSError as err:
-            print(err)
-            pass # Don't care about errors - so pass.
-            # Note that there are 3 possible errors. A timeout error, a general purpose error, or
-            # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
-
-
 
     img = sensor.snapshot()
 
@@ -182,8 +156,6 @@ if __name__ == "__main__":
 
 
     ########### FIND BAD BLOBS
-
-
 
     unhealthy_full_l_mean = 0
     unhealthy_full_a_mean = 0
