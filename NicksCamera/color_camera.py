@@ -1,4 +1,4 @@
-import sensor, image, time, pyb, ustruct
+import sensor, image, time, utime, pyb, ustruct
 
 #################
 # This send function takes packed data, calculates the size, sends that first, then sends the data
@@ -129,7 +129,7 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
     # bothered to deal with it.
     while elapsed_time < (wait_time / 2) and success == False:
         try:
-            i2c_obj.recv(i2c_data, addr =0x12, timeout = 5000)
+            i2c_obj.recv(i2c_data, addr = 0x12, timeout = 5000)
             print("Received data")
             success = True
         except OSError as err:
@@ -141,8 +141,11 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
         return -1
 
     if msg_stage == 1:
-        next_msg_size_bytes = int(ustruct.unpack("<i", i2c_data))
-        packed_msg = listen_for_msg(msg_size_bytes = next_msg_size_bytes, msg_stage = 2)
+        next_msg_size_bytes = ustruct.unpack("<i", i2c_data)[0]
+        print("Message received (stage 1): ")
+        print(next_msg_size_bytes)
+        print("Type: ", type(next_msg_size_bytes))
+        packed_msg = listen_for_msg(msg_size_bytes = int(next_msg_size_bytes), msg_stage = 2)
         # If an error occured in stage 2, exit stage 1
         if packed_msg == -1:
             return -1
@@ -284,4 +287,4 @@ if __name__ == "__main__":
         a_mean = leaves_mean_a_sum / (leaf_blob_index + 1)
 
     sensor.flush()
-    time.sleep(3000)
+    utime.sleep_ms(3000)
