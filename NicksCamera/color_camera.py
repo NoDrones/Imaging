@@ -23,12 +23,7 @@ def send_packed_msg(packed_msg, packed_msg_size, max_attempts = 5):
                 success = True
             except OSError as err:
                 print("Error: " + str(err))
-                utime.sleep_ms(100)
-                # I have been getting I/O errors, if we see one try resetting i2c
-                if (err == EIO):
-                    i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
-                    i2c_obj.deinit() # Fully reset I2C device...
-                    i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
+                utime.sleep_ms(50)
                 pass # Don't care about errors - so pass.
                 # Note that there are 3 possible errors. A timeout error, a general purpose error, or
                 # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
@@ -142,9 +137,6 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
 
     if msg_stage == 1:
         next_msg_size_bytes = ustruct.unpack("<i", i2c_data)[0]
-        print("Message received (stage 1): ")
-        print(next_msg_size_bytes)
-        print("Type: ", type(next_msg_size_bytes))
         packed_msg = listen_for_msg(msg_size_bytes = int(next_msg_size_bytes), msg_stage = 2)
         # If an error occured in stage 2, exit stage 1
         if packed_msg == -1:
@@ -230,10 +222,12 @@ if __name__ == "__main__":
     i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
 
     success = send_calibration()
-    print("Success??? = %d" % success)
+    print("Success = %d" % success)
 
     msg_type = receive_msg()
-    if msg_type != "trigger":
+    if msg_type == -1:
+        print("Could not receive message.")
+    elif "trigger" not in msg_type:
         print("Unexpected msg_type: " + str(msg_type))
     print(msg_type)
 

@@ -129,7 +129,7 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
     while elapsed_time < (wait_time / 2) and success == False:
         try:
             i2c_obj.recv(i2c_data, timeout = 5000)
-            print("Received data")
+            print("Received data (stage %i)" % msg_stage)
             success = True
         except OSError as err:
             print("Error: " + str(err))
@@ -141,9 +141,6 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
 
     if msg_stage == 1:
         next_msg_size_bytes = ustruct.unpack("<i", i2c_data)[0]
-        print("Message received (stage 1): ")
-        print(next_msg_size_bytes)
-        print("Type: ", type(next_msg_size_bytes))
         packed_msg = listen_for_msg(msg_size_bytes = int(next_msg_size_bytes), msg_stage = 2)
         # If an error occured in stage 2, exit stage 1
         if packed_msg == -1:
@@ -175,12 +172,15 @@ def receive_msg():
         # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure,
         # warning_bytes
         calibration_tuple = listen_for_msg(format_str = next_msg_format_str)
+        calibration_list = list(calibration_tuple)
+        # strip extra bytes from end of warning string, which is the last value in the string
+        calibration_list[-1] = calibration_list[-1].decode('ascii').rstrip('\x00')
         #### CALL CALIBRATION FUNCTION ####
-        print("Calibration tuple: ", calibration_tuple)
+        print("Calibration list: ", calibration_list)
         #### CALL CALIBRATION FUNCTION ####
         # Check for warnings
-        if calibration_tuple[5] != "none":
-            print("Calibration Warning: " + calibration_tuple[5].decode('ascii'))
+        if "none" not in calibration_list[-1]:
+            print("Calibration Warning: " + calibration_list[-1].decode('ascii'))
         return (next_msg_type_str)
 
     elif "data" in next_msg_type_str:
@@ -188,12 +188,15 @@ def receive_msg():
         # data tuple structure: leaf_count_h, leaf_count_u, leaf_health_h, leaf_health_u,
         # plant_ndvi, plant_ir, warning_bytes
         data_tuple = listen_for_msg(format_str = next_msg_format_str)
+        data_list = list(data_tuple)
+        # strip extra bytes from end of warning string, which is the last value in the string
+        data_list[-1] = data_list[-1].decode('ascii').rstrip('\x00')
         #### CALL DATA LOGGING FUNCTION ####
-        print("Data tuple: ", data_tuple)
+        print("Data list: ", data_list)
         #### CALL DATA LOGGING FUNCTION ####
         # Check for warnings
-        if data_tuple[6] != "none":
-            print("Data Warning: " + data_tuple[6].decode('ascii'))
+        if "none" not in data_list[-1]:
+            print("Data Warning: " + data_list[-1].decode('ascii'))
         # return the next_msg_format_str
         # should evaluate this, and if it's not "<s" you better be ready to send something else
         return (next_msg_type_str)
@@ -235,9 +238,10 @@ if __name__ == "__main__":
 
     # IR camera waits for calibration directions from the color camera
     msg_type = receive_msg()
-    if msg_type != "calibration":
+    if msg_type == -1:
+        print("Could not receive message.")
+    elif "calibration" not in msg_type:
         print("Unexpected msg_type: " + str(msg_type))
-    print(msg_type)
 
     # Trigger light source/color camera
     if send_trigger() == -1:
