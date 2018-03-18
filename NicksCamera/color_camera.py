@@ -23,6 +23,12 @@ def send_packed_msg(packed_msg, packed_msg_size, max_attempts = 5):
                 success = True
             except OSError as err:
                 print("Error: " + str(err))
+                utime.sleep_ms(100)
+                # I have been getting I/O errors, if we see one try resetting i2c
+                if (err == EIO):
+                    i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
+                    i2c_obj.deinit() # Fully reset I2C device...
+                    i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
                 pass # Don't care about errors - so pass.
                 # Note that there are 3 possible errors. A timeout error, a general purpose error, or
                 # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
@@ -231,7 +237,7 @@ if __name__ == "__main__":
 
     print("Triggering photo regardless...")
     # Wait 42ms and snap photo
-    time.sleep_ms(42)
+    utime.sleep_ms(42)
     img = sensor.snapshot()         # Take a picture and return the image.
 
     img_hist = img.get_histogram()
