@@ -1,4 +1,4 @@
-import sensor, image, time, pyb, ustruct
+import sensor, image, time, utime, pyb, ustruct
 
 #################
 # This send function takes packed data, calculates the size, sends that first, then sends the data
@@ -12,17 +12,18 @@ def send_packed_msg(packed_msg, max_attempts = 5):
 
     for msg in msg_list:
         attempts = 0
+        success = False
         while success == False and attempts < max_attempts:
-            print("Sending message. Attempt # %i" % attempt)
+            print("Sending message. Attempt # %i" % attempts)
             # Attempt to send packed data with 5 second timeout
             attempts = attempts + 1
-            err = 0
             try:
-                i2c_obj.send(msg, addr=0x12, timeout=5000)
+                i2c_obj.send(msg, timeout=5000)
                 print("Message sent...")
                 success = True
             except OSError as err:
                 print("Error: " + str(err))
+                utime.sleep_ms(100)
                 pass # Don't care about errors - so pass.
                 # Note that there are 3 possible errors. A timeout error, a general purpose error, or
                 # a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
@@ -55,12 +56,14 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<5
 
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
 
-    format_str = "<6i50s"
+    format_str = "<2i4f50s"
     success = send_next_msg_format(next_msg_type_str = "data")
     if success == False:
         return -1
 
     warning_bytes = warning_str.encode('ascii')
+    print("leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir:")
+    print(leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir)
 
     packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
 
@@ -74,7 +77,9 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"):
 
     format_str = "<5i50s"
-    success = send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
+    msg_type_str = "calibration"
+    msg_type_encoded = msg_type_str.encode('ascii')
+    success = send_next_msg_format(next_msg_type_str = msg_type_encoded, next_msg_format_str = format_str)
     if success == False:
         return -1
 
@@ -138,7 +143,7 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
         next_msg_size_bytes = ustruct.unpack("<i", i2c_data)[0]
         print("Message received (stage 1): ")
         print(next_msg_size_bytes)
-        print(type(next_msg_size_bytes))
+        print("Type: ", type(next_msg_size_bytes))
         packed_msg = listen_for_msg(msg_size_bytes = int(next_msg_size_bytes), msg_stage = 2)
         # If an error occured in stage 2, exit stage 1
         if packed_msg == -1:
@@ -157,11 +162,6 @@ def receive_msg():
     # formatted as '<ss'. If you want to try for longer, specify a longer wait_time.
     print("Listening...")
 
-    #try:
-        #next_msg_type_bytes, next_msg_format_bytes = listen_for_msg()
-    #except OSError as err:
-        #return -1
-
     received_tuple = listen_for_msg()
     if received_tuple == -1:
         return -1
@@ -170,7 +170,7 @@ def receive_msg():
     next_msg_type_str = next_msg_type_bytes.decode("ascii")
     next_msg_format_str = next_msg_format_bytes.decode("ascii")
 
-    if next_msg_type_str == "calibration":
+    if "calibration" in next_msg_type_str:
         print("Calibration message incoming...")
         # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure,
         # warning_bytes
@@ -179,11 +179,11 @@ def receive_msg():
         print("Calibration tuple: ", calibration_tuple)
         #### CALL CALIBRATION FUNCTION ####
         # Check for warnings
-        if calibration_tuple[6] != "none":
-            print("Calibration Warning: " + calibration_tuple[6])
+        if calibration_tuple[5] != "none":
+            print("Calibration Warning: " + calibration_tuple[5].decode('ascii'))
         return (next_msg_type_str)
 
-    elif next_msg_type_str == "data":
+    elif "data" in next_msg_type_str:
         print("Data message incoming...")
         # data tuple structure: leaf_count_h, leaf_count_u, leaf_health_h, leaf_health_u,
         # plant_ndvi, plant_ir, warning_bytes
@@ -192,13 +192,13 @@ def receive_msg():
         print("Data tuple: ", data_tuple)
         #### CALL DATA LOGGING FUNCTION ####
         # Check for warnings
-        if data_tuple[7] != "none":
-            print("Data Warning: " + data_tuple[7])
+        if data_tuple[6] != "none":
+            print("Data Warning: " + data_tuple[6].decode('ascii'))
         # return the next_msg_format_str
         # should evaluate this, and if it's not "<s" you better be ready to send something else
         return (next_msg_type_str)
 
-    elif next_msg_type_str == "trigger":
+    elif "trigger" in next_msg_type_str:
         #### CALL TRIGGER FUNCTION ####
         return (next_msg_type_str)
 
@@ -244,7 +244,7 @@ if __name__ == "__main__":
         print("Trigger unsuccessful")
 
     # Wait 42ms and snap photo
-    time.sleep_ms(42)
+    utime.sleep_ms(42)
     img = sensor.snapshot()         # Take a picture and return the image.
 
     '''
@@ -360,4 +360,4 @@ if __name__ == "__main__":
     print(img.compressed_for_ide(quality = 25))
 
     sensor.flush()
-    time.sleep(3000)
+    utime.sleep_ms(3000)

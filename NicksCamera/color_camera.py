@@ -61,7 +61,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<5
 
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
 
-    format_str = "<6i50s"
+    format_str = "<2i4f50s"
     success = send_next_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
     if success == False:
         return -1
@@ -168,11 +168,10 @@ def receive_msg():
         return -1
     next_msg_type_bytes = received_tuple[0]
     next_msg_format_bytes =  received_tuple[1]
-
     next_msg_type_str = next_msg_type_bytes.decode("ascii")
     next_msg_format_str = next_msg_format_bytes.decode("ascii")
 
-    if next_msg_type_str == "calibration":
+    if "calibration" in next_msg_type_str:
         print("Calibration message incoming...")
         # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure,
         # warning_bytes
@@ -181,11 +180,11 @@ def receive_msg():
         print("Calibration tuple: ", calibration_tuple)
         #### CALL CALIBRATION FUNCTION ####
         # Check for warnings
-        if calibration_tuple[6] != "none":
-            print("Calibration Warning: " + calibration_tuple[6])
+        if calibration_tuple[5] != "none":
+            print("Calibration Warning: " + calibration_tuple[5].decode('ascii'))
         return (next_msg_type_str)
 
-    elif next_msg_type_str == "data":
+    elif "data" in next_msg_type_str:
         print("Data message incoming...")
         # data tuple structure: leaf_count_h, leaf_count_u, leaf_health_h, leaf_health_u,
         # plant_ndvi, plant_ir, warning_bytes
@@ -194,13 +193,13 @@ def receive_msg():
         print("Data tuple: ", data_tuple)
         #### CALL DATA LOGGING FUNCTION ####
         # Check for warnings
-        if data_tuple[7] != "none":
-            print("Data Warning: " + data_tuple[7])
+        if data_tuple[6] != "none":
+            print("Data Warning: " + data_tuple[6].decode('ascii'))
         # return the next_msg_format_str
         # should evaluate this, and if it's not "<s" you better be ready to send something else
         return (next_msg_type_str)
 
-    elif next_msg_type_str == "trigger":
+    elif "trigger" in next_msg_type_str:
         #### CALL TRIGGER FUNCTION ####
         return (next_msg_type_str)
 
