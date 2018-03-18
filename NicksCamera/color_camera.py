@@ -125,7 +125,7 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
     while elapsed_time < (wait_time / 2) and success == False:
         try:
             i2c_obj.recv(i2c_data, addr = 0x12, timeout = 5000)
-            print("Received data")
+            print("Received data (stage %i)" % msg_stage)
             success = True
         except OSError as err:
             print("Error: " + str(err))
@@ -168,12 +168,15 @@ def receive_msg():
         # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure,
         # warning_bytes
         calibration_tuple = listen_for_msg(format_str = next_msg_format_str)
+        calibration_list = list(calibration_tuple)
+        # strip extra bytes from end of warning string, which is the last value in the string
+        calibration_list[-1] = calibration_list[-1].decode('ascii').rstrip('\x00')
         #### CALL CALIBRATION FUNCTION ####
-        print("Calibration tuple: ", calibration_tuple)
+        print("Calibration list: ", calibration_list)
         #### CALL CALIBRATION FUNCTION ####
         # Check for warnings
-        if calibration_tuple[5] != "none":
-            print("Calibration Warning: " + calibration_tuple[5].decode('ascii'))
+        if "none" not in calibration_list[-1]:
+            print("Calibration Warning: " + calibration_list[-1].decode('ascii'))
         return (next_msg_type_str)
 
     elif "data" in next_msg_type_str:
@@ -181,12 +184,15 @@ def receive_msg():
         # data tuple structure: leaf_count_h, leaf_count_u, leaf_health_h, leaf_health_u,
         # plant_ndvi, plant_ir, warning_bytes
         data_tuple = listen_for_msg(format_str = next_msg_format_str)
+        data_list = list(data_tuple)
+        # strip extra bytes from end of warning string, which is the last value in the string
+        data_list[-1] = data_list[-1].decode('ascii').rstrip('\x00')
         #### CALL DATA LOGGING FUNCTION ####
-        print("Data tuple: ", data_tuple)
+        print("Data list: ", data_list)
         #### CALL DATA LOGGING FUNCTION ####
         # Check for warnings
-        if data_tuple[6] != "none":
-            print("Data Warning: " + data_tuple[6].decode('ascii'))
+        if "none" not in data_list[-1]:
+            print("Data Warning: " + data_list[-1].decode('ascii'))
         # return the next_msg_format_str
         # should evaluate this, and if it's not "<s" you better be ready to send something else
         return (next_msg_type_str)
