@@ -153,7 +153,13 @@ def receive_msg():
     # to contain details about the 2nd communication. The assumption is this first communication is
     # formatted as '<ss'. If you want to try for longer, specify a longer wait_time.
     print("Listening...")
-    next_msg_type_bytes, next_msg_format_bytes = listen_for_msg()
+
+    received_tuple = listen_for_msg()
+    if received_tuple == -1:
+        return -1
+    next_msg_type_bytes = received_tuple[0]
+    next_msg_format_bytes =  received_tuple[1]
+
     next_msg_type_str = next_msg_type_bytes.decode("ascii")
     next_msg_format_str = next_msg_format_bytes.decode("ascii")
 
