@@ -234,10 +234,8 @@ if __name__ == "__main__":
     msg_type = receive_msg()
     if msg_type == -1:
         print("Could not receive message.")
-        break
     elif "trigger" not in msg_type:
         print("Unexpected msg_type: " + str(msg_type))
-        break
 
     print("Triggering...")
     # Wait 42ms and snap photo
@@ -248,10 +246,8 @@ if __name__ == "__main__":
     msg_type = receive_msg()
     if msg_type == -1:
         print("Could not receive message.")
-        break
     elif "data" not in msg_type:
         print("Unexpected msg_type: " + str(msg_type))
-        break
 
     # now perform measurements on your own image
     img_hist = img.get_histogram()

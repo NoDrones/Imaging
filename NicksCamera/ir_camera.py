@@ -1,4 +1,4 @@
-import sensor, image, time, utime, pyb, ustruct
+import sensor, image, time, utime, pyb, ustruct, os
 
 #################
 # This send function takes packed data, calculates the size, sends that first, then sends the data
@@ -265,6 +265,38 @@ if __name__ == "__main__":
 
     #thresholds LAB -> [Llo, Lhi, Alo, Ahi, Blo, Bhi]
 
+    # Save raw image, save compressed image, load back in raw image for processing. It is necessary
+    # we reload the raw image because compressing it (needed for saving jpeg) overwrites the raw
+    # file in the heap, and the heap can't handle two pictures so we then have to reload it.
+
+    # should pull img_number from a text file and read the plant_id from a qr code or beaglebone
+    # default mode is pyb.usb_mode('VCP+MSC')
+    pyb.usb_mode('VCP+HID')
+    utime.sleep_ms(1000)
+    last_photo_id_path = "last_photo_id.txt"
+    last_photo_id_fd = open(last_photo_id_path, "w+")
+    img_number_str = last_photo_id_fd.read()
+    print(img_number_str)
+    img_number_str = last_photo_id_fd.write("696969")
+    print("Written bytes: " + str(img_number_str))
+    img_number_str = last_photo_id_fd.read()
+    print(int(img_number_str))
+    last_photo_id_fd.close()
+
+    img_number = 4
+    plant_id = 1
+    img_id = str(img_number) + "_plant_" + str(plant_id)
+    raw_str = "raw_" + str(img_id)
+    raw_write = image.ImageWriter(raw_str)
+    raw_write.add_frame(img)
+    raw_write.close()
+    img.compress(quality = 100)
+    img.save("img_" + str(img_id))
+
+    raw_read = image.ImageReader(raw_str)
+    img = raw_read.next_frame(copy_to_fb = True, loop = False)
+    raw_read.close()
+
     img_hist = img.get_histogram()
     img_stats = img_hist.get_statistics()
 
@@ -279,6 +311,7 @@ if __name__ == "__main__":
     unhealthy_mean = 0
 
     blob_found = False
+    leaf_blob_index = 0
 
     for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
         blob_found = True
@@ -359,9 +392,6 @@ if __name__ == "__main__":
         print("Some leaves are unhappy, although they're soldiering on")
     else:
         print("Even your unhealthy leaves are healthy!")
-
-
-    print(img.compressed_for_ide(quality = 25))
 
     sensor.flush()
     utime.sleep_ms(3000)
