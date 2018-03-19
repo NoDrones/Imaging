@@ -169,7 +169,7 @@ def receive_msg():
         # warning_bytes
         calibration_tuple = listen_for_msg(format_str = next_msg_format_str)
         calibration_list = list(calibration_tuple)
-        # strip extra bytes from end of warning string, which is the last value in the string
+        # strip extra bytes from end of warning string, which is the last value in the list
         calibration_list[-1] = calibration_list[-1].decode('ascii').rstrip('\x00')
         #### CALL CALIBRATION FUNCTION ####
         print("Calibration list: ", calibration_list)
@@ -185,7 +185,7 @@ def receive_msg():
         # plant_ndvi, plant_ir, warning_bytes
         data_tuple = listen_for_msg(format_str = next_msg_format_str)
         data_list = list(data_tuple)
-        # strip extra bytes from end of warning string, which is the last value in the string
+        # strip extra bytes from end of warning string, which is the last value in the list
         data_list[-1] = data_list[-1].decode('ascii').rstrip('\x00')
         #### CALL DATA LOGGING FUNCTION ####
         print("Data list: ", data_list)
@@ -228,20 +228,32 @@ if __name__ == "__main__":
     i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
 
     success = send_calibration()
-    print("Success = %d" % success)
+    print("Failed to send calibration." if success == -1 else "Calibration sent.")
 
+    # receive what we expect to be a trigger
     msg_type = receive_msg()
     if msg_type == -1:
         print("Could not receive message.")
+        break
     elif "trigger" not in msg_type:
         print("Unexpected msg_type: " + str(msg_type))
-    print(msg_type)
+        break
 
-    print("Triggering photo regardless...")
+    print("Triggering...")
     # Wait 42ms and snap photo
     utime.sleep_ms(42)
     img = sensor.snapshot()         # Take a picture and return the image.
 
+    # receive ir_data before continuing
+    msg_type = receive_msg()
+    if msg_type == -1:
+        print("Could not receive message.")
+        break
+    elif "data" not in msg_type:
+        print("Unexpected msg_type: " + str(msg_type))
+        break
+
+    # now perform measurements on your own image
     img_hist = img.get_histogram()
     img_stats = img_hist.get_statistics()
     #print(img.compressed_for_ide(quality = 25))
@@ -286,4 +298,12 @@ if __name__ == "__main__":
         a_mean = leaves_mean_a_sum / (leaf_blob_index + 1)
 
     sensor.flush()
-    utime.sleep_ms(3000)
+
+    ##############SAVE DATA AND IMAGE TO SD CARD###############
+    ##############SAVE DATA AND IMAGE TO SD CARD###############
+
+    ##############SEND DATA AND IMAGE TO BEAGLEBONE###############
+    ##############SEND DATA AND IMAGE TO BEAGLEBONE###############
+
+    ##############REST AND WAIT FOR SIGNAL###############
+    ##############REST AND WAIT FOR SIGNAL###############
