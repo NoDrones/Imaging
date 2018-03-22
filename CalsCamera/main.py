@@ -174,7 +174,7 @@ if __name__ == "__main__":
     '''
     '''
     L = Lightness where 0 is black and 100 is white
-    A = -127 is green and 128 is red`
+    A = -127 is green and 128 is red
     B = -127 is blue and 128 is yellow.
     '''
 
