@@ -101,10 +101,9 @@ raw_read.close()
 beetle_cascade = image.HaarCascade("./low_FA_3_stage.cascade", stages=3)
 
 feature_rois = []
+feature_index = 0
 
 for blob in leaf_blobs:
-
-    img_GRAY.draw_rectangle(blob.rect(), color = 0) #black
 
     try:
         print("Finding features in blob " + str(blob))
@@ -112,11 +111,14 @@ for blob in leaf_blobs:
 
         if objects:
             for r in objects:
-                feature_rois.append(r)
+                feature_rois.append((feature_index, r))
+                feature_index++
                 print("Drawing rects around detected features.")
                 img_GRAY.draw_rectangle(r, color = 255)
         else:
             pass
+
+    img_GRAY.draw_rectangle(blob.rect(), color = 0) #black
 
     except Exception as e:
         print(e)
@@ -147,6 +149,8 @@ for i, feature in enumerate(feature_rois):
 for i, feature in enumerate(feature_rois): #do this last as to not have colored boxes impact your statistics
     print("feature roi: " + "i" + str(feature))
     img_RGB.draw_rectangle(feature, color = (0, 255, 255))
+
+
 
 
 sensor.flush()
