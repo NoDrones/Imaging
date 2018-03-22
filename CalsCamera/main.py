@@ -1,5 +1,5 @@
 #Author: Calvin Ryan
-import sensor, image, time, pyb, ustruct, math
+import sensor, image, time, pyb, ustruct, math, utime
 
 
 def get_gain():
@@ -143,6 +143,35 @@ if __name__ == "__main__":
 
     img = sensor.snapshot()
 
+    # should pull img_number from a text file and read the plant_id from a qr code or beaglebone
+    # default mode is pyb.usb_mode('VCP+MSC')
+    '''
+    pyb.usb_mode('VCP+HID')
+    utime.sleep_ms(1000)
+    last_photo_id_path = "last_photo_id.txt"
+    last_photo_id_fd = open(last_photo_id_path, "w+")
+    img_number_str = last_photo_id_fd.read()
+    print(img_number_str)
+    img_number_str = last_photo_id_fd.write("696969")
+    print("Written bytes: " + str(img_number_str))
+    img_number_str = last_photo_id_fd.read()
+    print(img_number_str)
+    last_photo_id_fd.close()
+
+    img_number = 1
+    plant_id = 1
+    img_id = str(img_number) + "_plant_" + str(plant_id)
+    raw_str = "raw_" + str(img_id)
+    raw_write = image.ImageWriter(raw_str)
+    raw_write.add_frame(img)
+    raw_write.close()
+    img.compress(quality = 100)
+    img.save("img_" + str(img_id))
+
+    raw_read = image.ImageReader(raw_str)
+    img = raw_read.next_frame(copy_to_fb = True, loop = False)
+    raw_read.close()
+    '''
     '''
     L = Lightness where 0 is black and 100 is white
     A = -127 is green and 128 is red`
@@ -260,7 +289,7 @@ if __name__ == "__main__":
         healthy_blob_a_mean += blob_stats[8]
         healthy_blob_b_mean += blob_stats[16]
 
-        img.draw_rectangle(stage_one_good_blob.rect(), color = (0, 0, 0)) #yellow
+        img.draw_rectangle(stage_one_good_blob.rect(), color = (0, 0, 0)) #black
         #img.draw_rectangle((stage_one_good_blob.cx() - round(side_l/2), stage_one_good_blob.cy() - round(side_l/2), round(side_l), round(side_l)), color = (255, 85, 0))
 
         ########## COLOR IT ALL IN
