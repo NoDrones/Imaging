@@ -1,0 +1,58 @@
+import sensor, image, time, pyb
+
+sensor.reset()                      # Reset and initialize the sensor.
+print("just reset")
+sensor.set_pixformat(sensor.RGB565) # Set pixel format to RGB565
+sensor.set_framesize(sensor.QVGA)   # Set frame size to QVGA (320x240)
+                                    # Can't do operations on RGB565 @ VGA resolution because not enough RAM. Image is automatically and forcibly compressed to JPEG.
+sensor.skip_frames(n = 60)          # Wait for settings take effect.
+
+sensor.set_auto_whitebal(False)
+print("just skipped frames")
+
+'''
+#get white balance. You have two seconds.
+t_start = time.ticks()
+t_elapsed = 0
+'''
+
+l_red = pyb.LED(1)
+l_green = pyb.LED(2)
+l_blue = pyb.LED(3)
+l_IR = pyb.LED(4)
+
+l_red.on() #red heartbeat
+time.sleep(200)
+l_red.off() #red heartbeat
+
+l_green.on() #green heartbeat
+time.sleep(200)
+l_green.off() #green heartbeat
+
+t_start = time.ticks()
+t_elapsed = 0
+
+for i in range(1000):
+    img = sensor.snapshot()         # Take a picture and return the image.
+
+    '''
+    L = Lightness where 0 is black and 100 is white
+    A = position between red and green where -127 is green and 128 is red
+    B = position between yellow and blue where -127 is blue and 128 is yellow.
+    '''
+
+    stage_one_thresholds = [(0, 100, -127, 0, 0, 60)] #LAB -> [Llo, Lhi, Alo, Ahi, Blo, Bhi]
+    stage_two_thresholds = [(10, 50, -10, 40, -30, 30)]
+
+    for blob_index, stage_one_blob in enumerate(img.find_blobs(stage_one_thresholds, pixels_threshold=50, area_threshold=50, merge = False)):
+        centroid_x = stage_one_blob.cx()
+        centroid_y = stage_one_blob.cy()
+        pixel = img.get_pixel(centroid_x, centroid_y)
+        print(pixel)
+        img.draw_rectangle((centroid_x - 10, centroid_y - 10, 20, 20))
+        
+#need these to flush the current image (if only taking a single image) in the frame buffer to the IDE and then give time for the blob containers to appear
+sensor.flush()
+time.sleep(1000)
+
+
