@@ -1,5 +1,5 @@
 import sensor, image, time, utime, pyb, ustruct, os
-
+#calvin sucks
 #################
 # This send function takes packed data, calculates the size, sends that first, then sends the data
 # This means the receiver is always looking for a format "<i" before next_msg_format
