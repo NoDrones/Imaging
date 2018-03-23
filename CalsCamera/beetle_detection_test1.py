@@ -112,13 +112,13 @@ for blob in leaf_blobs:
         if objects:
             for r in objects:
                 feature_rois.append((feature_index, r))
-                feature_index++
+                feature_index += 1
                 print("Drawing rects around detected features.")
-                img_GRAY.draw_rectangle(r, color = 255)
+                img_GRAY.draw_rectangle(r, color = (255, 255, 255))
         else:
             pass
 
-    img_GRAY.draw_rectangle(blob.rect(), color = 0) #black
+        img_GRAY.draw_rectangle(blob.rect(), color = (0, 0, 0)) #black
 
     except Exception as e:
         print(e)
@@ -135,7 +135,6 @@ B = -127 is blue and 128 is yellow.
 '''
 
 
-
 raw_str = "raw_1_RGB_plant_10"
 raw_read = image.ImageReader(raw_str)
 img_RGB = raw_read.next_frame(copy_to_fb = True, loop = True)
@@ -143,19 +142,29 @@ raw_read.close()
 
 beetle_color_thresholds = [0, 100, 0, 127, 0, 127]
 
-for i, feature in enumerate(feature_rois):
-    feature_stats = img_RGB.get_statistics(roi = feature)
-    print("feature_stats_" + "i" + str(feature_stats))
-for i, feature in enumerate(feature_rois): #do this last as to not have colored boxes impact your statistics
-    print("feature roi: " + "i" + str(feature))
-    img_RGB.draw_rectangle(feature, color = (0, 255, 255))
+potential_beetles = []
 
+if feature_rois:
+    print(feature_rois)
+    for feature in feature_rois:
+        feature_stats = img_RGB.get_statistics(roi = feature[1])
+        print("feature_stats_" + str(feature_rois[0]) + str(feature_stats))
+        if feature_stats.a_mean() > 0 & feature_stats.b_mean() < 5:
+            potential_beetles.append(feature[1])
 
+if potential_beetles:
+    for beetle in potential_beetles: #do this last as to not have colored boxes impact your statistics
+        print("potential beetle: " + str(beetle))
+        img_RGB.draw_rectangle(beetle, color = (255, 0, 255))
+
+if feature_rois:
+    for feature in feature_rois: #do this last as to not have colored boxes impact your statistics
+        print("feature roi: " + str(feature_rois[0]) + str(feature[1]))
+        img_RGB.draw_rectangle(feature[1], color = (0, 255, 255))
 
 
 sensor.flush()
 utime.sleep_ms(3000)
-img_RGB = None
 
 
 
