@@ -1,5 +1,11 @@
 import sensor, image, time, utime, pyb, ustruct
 
+exposure_time_us = 4200
+r_gain = 4
+g_gain = 4
+b_gain = 4
+overall_gain = 7
+
 #################
 # This send function takes packed data, calculates the size, sends that first, then sends the data
 # This means the receiver is always looking for a format "<i" before next_msg_format
@@ -210,27 +216,72 @@ def receive_msg():
         return (next_msg_type_str)
 
 #################
+# Call this function to toggle the flash state, it will return the new flash state
+
+def toggle_flash():
+    # \/ This is the code to define a Pin, make it an output and set it high/low \/
+    r_flash = pyb.Pin("P0", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+    g_flash = pyb.Pin("P1", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+    b_flash = pyb.Pin("P2", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+    #ir_flash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+
+    print("Flash value = ", r_flash.value()) # print the current value
+    if r_flash.value() == 1:
+        r_flash.low()          # or p.value(0) to make the pin low (0V)
+        g_flash.low()
+        b_flash.low()
+        return 0
+    elif r_flash.value() == 0:
+        r_flash.high()           # or p.value(1) to make the pin high (3.3V)
+        g_flash.high()
+        b_flash.high()
+        return 1
+    else:
+    print("I can't let you do that Dave")
+return
+
+#################
+def exposure_time_us():
+    return global exposure_time_us
+#################
+def r_gain():
+    return global r_gain
+#################
+def g_gain():
+    return global g_gain
+#################
+def b_gain():
+    return global b_gain
+#################
+def overall_gain():
+    return global overall_gain
+#################
 
 if __name__ == "__main__":
 
-    ########### SETUP STUFF
+    # \/ Setup Camera \/
 
     sensor.reset()
-    sensor.set_pixformat(sensor.GRAYSCALE)
+    sensor.set_pixformat(sensor.RGB565)
     sensor.set_framesize(sensor.QVGA)
     sensor.skip_frames(time = 2000)
     clock = time.clock()
 
-    sensor.set_auto_gain(False, gain_db = 7) # must be turned off for color tracking
-    sensor.set_auto_whitebal(False, rgb_gain_db = (4,4,4)) # must be turned off for color tracking
-    sensor.set_auto_exposure(False, exposure_us = 4200)
+    sensor.set_auto_gain(False, gain_db = overall_gain) # must be turned off for color tracking
+    sensor.set_auto_whitebal(False, rgb_gain_db = (r_gain, g_gain, b_gain)) # must be turned off for color tracking
+    sensor.set_auto_exposure(False, exposure_us = exposure_time_us)
 
     i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
     i2c_obj.deinit() # Fully reset I2C device...
     i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
 
+    # \/ Send Calibration & Wait \/
+
     success = send_calibration()
     print("Failed to send calibration." if success == -1 else "Calibration sent.")
+
+    # Set flash_time based on exposure time
+    flash_time_ms = (exposure_time_us() / 1000) + 50
 
     # receive what we expect to be a trigger
     msg_type = receive_msg()
@@ -239,10 +290,60 @@ if __name__ == "__main__":
     elif "trigger" not in msg_type:
         print("Unexpected msg_type: " + str(msg_type))
 
-    print("Triggering...")
-    # Wait 42ms and snap photo
-    utime.sleep_ms(42)
+    # \/ Take Photo \/
+
+    # ensures the flash turns on
+    while toggle_flash() != 1:
+        continue
+
+    # take a picture
+    utime.sleep_ms(25)
     img = sensor.snapshot()         # Take a picture and return the image.
+    utime.sleep_ms(flash_time_ms - 25)
+
+    # ensures the flash turns off
+    while toggle_flash() != 0:
+        continue
+
+    # \/ Name & Save Image \/
+
+    # Save raw image, save compressed image, load back in raw image for processing. It is necessary
+    # we reload the raw image because compressing it (needed for saving jpeg) overwrites the raw
+    # file in the heap, and the heap can't handle two pictures so we then have to reload it.
+
+    # should pull img_number from a text file and read the plant_id from a qr code or beaglebone
+    # default mode is pyb.usb_mode('VCP+MSC')
+    pyb.usb_mode('VCP+HID')
+    utime.sleep_ms(1000)
+    last_photo_id_path = "last_photo_id.txt"
+    last_photo_id_fd = open(last_photo_id_path, "w+")
+    img_number_str = last_photo_id_fd.read()
+    print(img_number_str)
+    img_number_str = last_photo_id_fd.write("696969")
+    print("Written bytes: " + str(img_number_str))
+    img_number_str = last_photo_id_fd.read()
+    print(int(img_number_str))
+    last_photo_id_fd.close()
+
+    # find the image number, source plant number from beaglebone
+    img_number = 4
+    plant_id = 1
+    img_id = str(img_number) + "plant_" + str(plant_id)
+    raw_str = "raw_" + str(img_id)
+    raw_write = image.ImageWriter(raw_str)
+    raw_write.add_frame(img)
+    raw_write.close()
+
+    # save a jpeg
+    img.compress(quality = 100)
+    img.save("img_" + str(img_id))
+
+    # reload the raw
+    raw_read = image.ImageReader(raw_str)
+    img = raw_read.next_frame(copy_to_fb = True, loop = False)
+    raw_read.close()
+
+    # \/ Get Data \/
 
     # receive ir_data before continuing
     msg_type = receive_msg()

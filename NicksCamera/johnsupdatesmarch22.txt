@@ -1,0 +1,71 @@
+1,15c1
+< import sensor, image, time, utime, pyb, ustruct, os, math
+< 
+< 
+< def toggle_flash():
+<     # \/ This is the code to define a Pin, make it an output and set it high/low \/
+<     irflash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+<     print ("Pin 3 value = ",irflash.value()) #print the current value
+<     if irflash.value() == 1:
+<         irflash.low()            # or p.value(0) to make the pin low (0V)
+<     elif irflash.value() == 0:
+<         irflash.high()           # or p.value(1) to make the pin high (3.3V)
+<     else:
+<         print("I can't let you do that Dave")
+<     return
+< 
+---
+> import sensor, image, time, utime, pyb, ustruct, os
+190c176
+<         # strip extra bytes from end of warning string, which is the last value in the string
+---
+>         # strip extra bytes from end of warning string, which is the last value in the list
+198c184
+<         return (next_msg_type_str, calibration_list)
+---
+>         return (next_msg_type_str)
+206c192
+<         # strip extra bytes from end of warning string, which is the last value in the string
+---
+>         # strip extra bytes from end of warning string, which is the last value in the list
+248,249d233
+<     a, b = receive_msg()
+< 
+256c240
+<     msg_type = a
+---
+>     msg_type = receive_msg()
+289a274,284
+>     pyb.usb_mode('VCP+HID')
+>     utime.sleep_ms(1000)
+>     last_photo_id_path = "last_photo_id.txt"
+>     last_photo_id_fd = open(last_photo_id_path, "w+")
+>     img_number_str = last_photo_id_fd.read()
+>     print(img_number_str)
+>     img_number_str = last_photo_id_fd.write("696969")
+>     print("Written bytes: " + str(img_number_str))
+>     img_number_str = last_photo_id_fd.read()
+>     print(int(img_number_str))
+>     last_photo_id_fd.close()
+384c379
+<     # calculates the average value for the unhealthy leaves regardless of leaf size
+---
+>     # calculates the average value for the healthy leaves regardless of leaf size
+394,410d388
+< 
+<     toggle_flash()
+<     utime.sleep_ms(2000)
+<     toggle_flash()
+< 
+<     pyb.usb_mode('VCP+HID')
+<     utime.sleep_ms(1000)
+<     last_photo_id_path = "last_photo_id.txt"
+<     last_photo_id_fd = open(last_photo_id_path, "w+")
+<     img_number_str = last_photo_id_fd.read()
+<     print(img_number_str)
+<     img_number_str = last_photo_id_fd.write("Calibration List: %s \nHealthy Mean: %i \nUnhealthy Mean: %i \n" % (str(b), healthy_mean, unhealthy_mean))
+<     print("Written bytes: " + str(img_number_str))
+<     img_number_str = last_photo_id_fd.read()
+<     #print(int(img_number_str))
+<     last_photo_id_fd.close()
+< 

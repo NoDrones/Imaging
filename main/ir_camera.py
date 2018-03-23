@@ -1,5 +1,11 @@
 import sensor, image, time, utime, pyb, ustruct, os
 
+exposure_time_us = 4200
+r_gain = 4
+g_gain = 4
+b_gain = 4
+overall_gain = 7
+
 #################
 # This send function takes packed data, calculates the size, sends that first, then sends the data
 # This means the receiver is always looking for a format "<i" before next_msg_format
@@ -212,10 +218,46 @@ def receive_msg():
         return (next_msg_type_str)
 
 #################
+# Call this function to toggle the flash state, it will return the new flash state
+
+def toggle_flash():
+    # \/ This is the code to define a Pin, make it an output and set it high/low \/
+    #r_flash = pyb.Pin("P0", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+    #g_flash = pyb.Pin("P1", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+    #b_flash = pyb.Pin("P2", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+    ir_flash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+
+    print("Pin 3 value = ", ir_flash.value()) #print the current value
+    if ir_flash.value() == 1:
+        ir_flash.low()            # or p.value(0) to make the pin low (0V)
+        return 0
+    elif ir_flash.value() == 0:
+        ir_flash.high()           # or p.value(1) to make the pin high (3.3V)
+        return 1
+    else:
+    print("I can't let you do that Dave")
+return
+
+#################
+def exposure_time_us():
+    return global exposure_time_us
+#################
+def r_gain():
+    return global r_gain
+#################
+def g_gain():
+    return global g_gain
+#################
+def b_gain():
+    return global b_gain
+#################
+def overall_gain():
+    return global overall_gain
+#################
 
 if __name__ == "__main__":
 
-    ########### SETUP STUFF
+    # \/ Setup Camera \/
 
     sensor.reset()
     sensor.set_pixformat(sensor.GRAYSCALE)
@@ -223,13 +265,15 @@ if __name__ == "__main__":
     sensor.skip_frames(time = 2000)
     clock = time.clock()
 
-    sensor.set_auto_gain(False, gain_db = 7) # must be turned off for color tracking
-    sensor.set_auto_whitebal(False, rgb_gain_db = (4,4,4)) # must be turned off for color tracking
-    sensor.set_auto_exposure(False, exposure_us = 4200)
+    sensor.set_auto_gain(False, gain_db = overall_gain) # must be turned off for color tracking
+    sensor.set_auto_whitebal(False, rgb_gain_db = (r_gain, g_gain, b_gain)) # must be turned off for color tracking
+    sensor.set_auto_exposure(False, exposure_us = exposure_time_us)
 
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
     i2c_obj.deinit() # Fully reset I2C device...
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
+
+    # \/ Receive Calibration \/
 
     # Calling receive_message will also trigger action if directed by sender, such as performing
     # calibration, or passing on/storing data, or taking a photo/flashing the light source
@@ -243,27 +287,29 @@ if __name__ == "__main__":
     elif "calibration" not in msg_type:
         print("Unexpected msg_type: " + str(msg_type))
 
+    # \/ Take Photo \/
+
+    # Set flash_time based on exposure time
+    flash_time_ms = (exposure_time_us() / 1000) + 50
+
     # Trigger light source/color camera
     if send_trigger() == -1:
         print("Trigger unsuccessful")
 
-    # Wait 42ms and snap photo
-    utime.sleep_ms(42)
+    # ensures the flash turns on
+    while toggle_flash() != 1:
+        continue
+
+    # take a picture
+    utime.sleep_ms(25)
     img = sensor.snapshot()         # Take a picture and return the image.
+    utime.sleep_ms(flash_time_ms - 25)
 
-    '''
-    L = Lightness where 0 is black and 100 is white
-    A = -127 is green and 128 is red
-    B = -127 is blue and 128 is yellow.
-    '''
+    # ensures the flash turns off
+    while toggle_flash() != 0:
+        continue
 
-    #Discriminate against median to determine lighting conditions
-    #3 bins:
-    #median < 20 = dimly lit (18 maybe?)
-    #20 =< median =< 40 = well lit
-    #median > 40 = over lit
-
-    #thresholds LAB -> [Llo, Lhi, Alo, Ahi, Blo, Bhi]
+    # \/ Name & Save Image \/
 
     # Save raw image, save compressed image, load back in raw image for processing. It is necessary
     # we reload the raw image because compressing it (needed for saving jpeg) overwrites the raw
@@ -283,19 +329,25 @@ if __name__ == "__main__":
     print(int(img_number_str))
     last_photo_id_fd.close()
 
+    # find the image number, source plant number from beaglebone
     img_number = 4
     plant_id = 1
-    img_id = str(img_number) + "_plant_" + str(plant_id)
+    img_id = str(img_number) + "plant_" + str(plant_id)
     raw_str = "raw_" + str(img_id)
     raw_write = image.ImageWriter(raw_str)
     raw_write.add_frame(img)
     raw_write.close()
+
+    # save a jpeg
     img.compress(quality = 100)
     img.save("img_" + str(img_id))
 
+    # reload the raw
     raw_read = image.ImageReader(raw_str)
     img = raw_read.next_frame(copy_to_fb = True, loop = False)
     raw_read.close()
+
+    # \/ Analyze Image \/
 
     img_hist = img.get_histogram()
     img_stats = img_hist.get_statistics()
@@ -376,12 +428,14 @@ if __name__ == "__main__":
         # equally
         unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_mean
 
-    # calculates the average value for the healthy leaves regardless of leaf size
+    # calculates the average value for the unhealthy leaves regardless of leaf size
     if (blob_found == True):
         unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
     unhealthy_leaves = (leaf_blob_index + 1)
 
     overall_ir =  ((healthy_leaves * healthy_mean) + (unhealthy_leaves * unhealthy_mean)) / (healthy_leaves + unhealthy_leaves)
+
+    # \/ Save Data & Send \/
 
     send_data(leaf_count = (healthy_leaves, unhealthy_leaves), leaf_health = (healthy_mean, unhealthy_mean), plant_ndvi = 0, plant_ir = overall_ir, warning_str = "none")
 
