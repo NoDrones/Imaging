@@ -81,9 +81,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"):
 
     format_str = "<5i50s"
-    msg_type_str = "calibration"
-    msg_type_encoded = msg_type_str.encode('ascii')
-    success = send_next_msg_format(next_msg_type_str = msg_type_encoded, next_msg_format_str = format_str)
+    success = send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
     if success == False:
         return -1
 
@@ -224,8 +222,6 @@ def toggle_flash():
     g_flash = pyb.Pin("P1", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
     b_flash = pyb.Pin("P2", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
     #ir_flash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
-
-    print("Flash value = ", r_flash.value()) # print the current value
     if r_flash.value() == 1:
         r_flash.low()          # or p.value(0) to make the pin low (0V)
         g_flash.low()
@@ -237,25 +233,25 @@ def toggle_flash():
         b_flash.high()
         return 1
     else:
-    print("I can't let you do that Dave")
-return
+        print("I can't let you do that Dave")
+    return -1
 
-#################
-def exposure_time_us():
-    return global exposure_time_us
-#################
-def r_gain():
-    return global r_gain
-#################
-def g_gain():
-    return global g_gain
-#################
-def b_gain():
-    return global b_gain
-#################
-def overall_gain():
-    return global overall_gain
-#################
+##################
+#def exposure_time_us():
+    #return global exposure_time_us
+##################
+#def r_gain():
+    #return global r_gain
+##################
+#def g_gain():
+    #return global g_gain
+##################
+#def b_gain():
+    #return global b_gain
+##################
+#def overall_gain():
+    #return global overall_gain
+##################
 
 if __name__ == "__main__":
 
@@ -275,13 +271,17 @@ if __name__ == "__main__":
     i2c_obj.deinit() # Fully reset I2C device...
     i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
 
+    # ensure flash is off
+    while toggle_flash() != 0:
+        continue
+
     # \/ Send Calibration & Wait \/
 
     success = send_calibration()
     print("Failed to send calibration." if success == -1 else "Calibration sent.")
 
     # Set flash_time based on exposure time
-    flash_time_ms = (exposure_time_us() / 1000) + 50
+    flash_time_ms = (exposure_time_us / 1000) + 50
 
     # receive what we expect to be a trigger
     msg_type = receive_msg()
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     # take a picture
     utime.sleep_ms(25)
     img = sensor.snapshot()         # Take a picture and return the image.
-    utime.sleep_ms(flash_time_ms - 25)
+    utime.sleep_ms(int(flash_time_ms - 25))
 
     # ensures the flash turns off
     while toggle_flash() != 0:

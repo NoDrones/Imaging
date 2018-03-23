@@ -83,9 +83,7 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 def send_calibration(overall_gain = 0, rgb_gain = (0, 0, 0), exposure = 0, warning_str = "none"):
 
     format_str = "<5i50s"
-    msg_type_str = "calibration"
-    msg_type_encoded = msg_type_str.encode('ascii')
-    success = send_next_msg_format(next_msg_type_str = msg_type_encoded, next_msg_format_str = format_str)
+    success = send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
     if success == False:
         return -1
 
@@ -226,8 +224,6 @@ def toggle_flash():
     #g_flash = pyb.Pin("P1", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
     #b_flash = pyb.Pin("P2", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
     ir_flash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
-
-    print("Pin 3 value = ", ir_flash.value()) #print the current value
     if ir_flash.value() == 1:
         ir_flash.low()            # or p.value(0) to make the pin low (0V)
         return 0
@@ -235,25 +231,25 @@ def toggle_flash():
         ir_flash.high()           # or p.value(1) to make the pin high (3.3V)
         return 1
     else:
-    print("I can't let you do that Dave")
-return
+        print("I can't let you do that Dave")
+    return -1
 
-#################
-def exposure_time_us():
-    return global exposure_time_us
-#################
-def r_gain():
-    return global r_gain
-#################
-def g_gain():
-    return global g_gain
-#################
-def b_gain():
-    return global b_gain
-#################
-def overall_gain():
-    return global overall_gain
-#################
+##################
+#def exposure_time_us():
+    #return global exposure_time_us
+##################
+#def r_gain():
+    #return global r_gain
+##################
+#def g_gain():
+    #return global g_gain
+##################
+#def b_gain():
+    #return global b_gain
+##################
+#def overall_gain():
+    #return global overall_gain
+##################
 
 if __name__ == "__main__":
 
@@ -273,6 +269,10 @@ if __name__ == "__main__":
     i2c_obj.deinit() # Fully reset I2C device...
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
 
+    # ensure flash is off
+    while toggle_flash() != 0:
+        pass
+
     # \/ Receive Calibration \/
 
     # Calling receive_message will also trigger action if directed by sender, such as performing
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     # \/ Take Photo \/
 
     # Set flash_time based on exposure time
-    flash_time_ms = (exposure_time_us() / 1000) + 50
+    flash_time_ms = (exposure_time_us / 1000) + 50
 
     # Trigger light source/color camera
     if send_trigger() == -1:
@@ -303,7 +303,7 @@ if __name__ == "__main__":
     # take a picture
     utime.sleep_ms(25)
     img = sensor.snapshot()         # Take a picture and return the image.
-    utime.sleep_ms(flash_time_ms - 25)
+    utime.sleep_ms(int(flash_time_ms - 25))
 
     # ensures the flash turns off
     while toggle_flash() != 0:
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     img_number_str = last_photo_id_fd.write("696969")
     print("Written bytes: " + str(img_number_str))
     img_number_str = last_photo_id_fd.read()
-    print(int(img_number_str))
+    print(img_number_str)
     last_photo_id_fd.close()
 
     # find the image number, source plant number from beaglebone
