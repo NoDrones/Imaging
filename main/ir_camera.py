@@ -173,7 +173,7 @@ def receive_msg():
         # warning_bytes
         calibration_tuple = listen_for_msg(format_str = next_msg_format_str)
         calibration_list = list(calibration_tuple)
-        # strip extra bytes from end of warning string, which is the last value in the string
+        # strip extra bytes from end of warning string, which is the last value in the list
         calibration_list[-1] = calibration_list[-1].decode('ascii').rstrip('\x00')
         #### CALL CALIBRATION FUNCTION ####
         print("Calibration list: ", calibration_list)
@@ -189,7 +189,7 @@ def receive_msg():
         # plant_ndvi, plant_ir, warning_bytes
         data_tuple = listen_for_msg(format_str = next_msg_format_str)
         data_list = list(data_tuple)
-        # strip extra bytes from end of warning string, which is the last value in the string
+        # strip extra bytes from end of warning string, which is the last value in the list
         data_list[-1] = data_list[-1].decode('ascii').rstrip('\x00')
         #### CALL DATA LOGGING FUNCTION ####
         print("Data list: ", data_list)
