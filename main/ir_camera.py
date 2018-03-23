@@ -7,6 +7,107 @@ b_gain = 4
 overall_gain = 7
 
 #################
+# Returns Overall Gain in DB
+
+def get_gain():
+    gain_reg_val = sensor.__read_reg(0x00)
+    #print("gain_reg_val: " + str(gain_reg_val))
+    bitwise_gain_range = (gain_reg_val & 0b11110000) >> 4 #get the highest four bits which correspond to gain range. Depends on the bits set. Can be 0 > 4 for a total of 5 ranges.
+    #print("bitwise_gain_range: " + str(bin(bitwise_gain_range)))
+    gain_range = ((bitwise_gain_range & 0b1000) >> 3) + ((bitwise_gain_range & 0b0100) >> 2) + ((bitwise_gain_range & 0b0010) >> 1) + (bitwise_gain_range & 0b0001) #get an int for the number of bits set
+    #print("read_gain_range: " + str(gain_range))
+    gain_LSBs = gain_reg_val & 0b00001111 #The 4 lsbs represent the fine tuning gain control.
+    #print("gain_LSBs: " + str(gain_LSBs))
+    gain_curve_index = 16 * gain_range + gain_LSBs # this gives you an index from 0 > 79 which is the range of points you need to describe every possible gain setting along the new gain curve
+    #print("gain_curve_index: " + str(gain_curve_index))
+    gain = 10 ** (30 * gain_curve_index / 79 / 20) #10** = 10 ^, calculate the gain along the new exponential gain curve I defined earlier on
+    #print("gain: " + str(gain))
+
+    if (0b00000100 && sensor__read_reg(0x5C)) == 0:
+        b_gain = sensor.__read_reg(0x01) / 0x40
+        r_gain = sensor.__read_reg(0x02) / 0x40
+        g_gain = sensor.__read_reg(0x03) / 0x40
+    else:
+        b_gain = sensor.__read_reg(0x01) / 0x80
+        r_gain = sensor.__read_reg(0x02) / 0x80
+        g_gain = sensor.__read_reg(0x03) / 0x80
+
+    return (gain, r_gain, g_gain, b_gain)
+
+#################
+#
+
+def set_gain(gain_db):
+    # gain_correlation_equation = 20*log(gain_db) = 30*(index)/79
+    gain_curve_index = (79 * 20 * math.log(gain_db, 10)) / 30 #return an index from the new exponential gain curve...
+    #... Can be 0 > 79 which is the # of points needed to describe every gain setting along the new curve
+    #print("gain_curve_index: " + str(gain_curve_index))
+    gain_range = int(gain_curve_index/16) #find a 0 > 4 value for the gain range. This range is defined by the 4 msbs. Thus we divide and round down by the LSB of the 4 MSBs (16)
+    #print("gain_range: " + str(gain_range))
+    gain_LSBs = int(gain_curve_index - 16 * gain_range) & 0b00001111 #Find how many LSBs above the gain range the index is. This is your fine tuning gain control
+    #print("gain_LSBs: " + str(bin(gain_LSBs)))
+    bitwise_gain_range = (0b1111 << gain_range) & 0b11110000 #make the gain range bitwise
+    #print("bitwise_gain_range: " + str(bin(bitwise_gain_range)))
+    gain_reg_val = bitwise_gain_range | gain_LSBs #OR
+    #print("gain to set: " + str(bin(gain_reg_val)))
+    sensor.__write_reg(0x00, gain_reg_val)
+    return gain_reg_val
+
+#################
+#
+
+def set_custom_exposure(high_mean_thresh = 65, low_mean_thresh = 55):
+    try:
+        print("Starting Exposure Adjustment...")
+        cur_gain, r_gain, b_gain, g_gain = get_gain()
+        #b_gain_raw = sensor.__read_reg(0x01)
+        #r_gain_raw = sensor.__read_reg(0x02)
+        #g_gain_raw = sensor.__read_reg(0x03)
+        #r_gain_raw = round(r_gain/4)
+        #g_gain_raw = round(g_gain/4)
+        #b_gain_raw = round(b_gain/4)
+        #sensor.__write_reg(0x01, b_gain_raw)
+        #sensor.__write_reg(0x02, r_gain_raw)
+        #sensor.__write_reg(0x03, g_gain_raw)
+
+        img = sensor.snapshot()         # Take a picture and return the image.
+        img_stats = img.get_statistics()
+        mean = img_stats.mean()
+        count = 0
+
+        while(((mean > high_mean_thresh) | (mean < low_mean_thresh))) & (count < 256) & (cur_gain >= 0):
+
+            img = sensor.snapshot()         # Take a picture and return the image.
+            img_stats = img.get_statistics()
+            mean = img_stats.mean()
+
+            if ((cur_gain < 1) | (cur_gain > 32)):
+                break
+
+            if mean > high_mean_thresh:
+                new_gain = cur_gain - .1
+            elif mean < low_mean_thresh:
+                new_gain = cur_gain + .1
+            else:
+                break #we're in the range now!
+
+            set_gain(new_gain)
+            cur_gain = new_gain
+            count += 1
+
+        if (count < 310) | (cur_gain == 0):
+            print("Exposure Adjustment Complete.")
+            return mean
+        else:
+            print("Exposure Adjustment Incomplete.")
+            return -1
+
+    except Exception as e:
+        print(e)
+        print("Error occured!")
+        return -2
+
+#################
 # This send function takes packed data, calculates the size, sends that first, then sends the data
 # This means the receiver is always looking for a format "<i" before next_msg_format
 
@@ -261,9 +362,20 @@ if __name__ == "__main__":
     sensor.skip_frames(time = 2000)
     clock = time.clock()
 
+    # Analog gain introduces less noise than digital gain, we should use this before anything else
+    print("Initial analog gain register = " + bin(sensor.__read_reg(0x4D)))
+    print("Maxing out analog gain register and setting AWB/AGC...")
+    sensor.__write_reg(0x4D, 0b11111111)
+    print("Analog gain register pre AWB/AGC setting = " + bin(sensor.__read_reg(0x4D)))
+
     sensor.set_auto_gain(False, gain_db = overall_gain) # must be turned off for color tracking
     sensor.set_auto_whitebal(False, rgb_gain_db = (r_gain, g_gain, b_gain)) # must be turned off for color tracking
     sensor.set_auto_exposure(False, exposure_us = exposure_time_us)
+
+    # Analog gain introduces less noise than digital gain, we should use this before anything else
+    print("Analog gain register post AWB/AGC setting = " + bin(sensor.__read_reg(0x4D)))
+    # Now set the exposure
+    set_custom_exposure()
 
     i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
     i2c_obj.deinit() # Fully reset I2C device...
