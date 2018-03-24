@@ -1,11 +1,5 @@
 import sensor, image, time, utime, pyb, ustruct, os
 
-exposure_time_us = 4200
-r_gain = 4
-g_gain = 4
-b_gain = 4
-overall_gain = 7
-
 #################
 # Returns Overall Gain in DB
 
@@ -22,8 +16,15 @@ def get_gain():
     #print("gain_curve_index: " + str(gain_curve_index))
     gain = 10 ** (30 * gain_curve_index / 79 / 20) #10** = 10 ^, calculate the gain along the new exponential gain curve I defined earlier on
     #print("gain: " + str(gain))
+    #g = sensor.__read_reg(0x01)
+    #print(g)
+    #utime.sleep_ms(1000)
 
-    if (0b00000100 && sensor__read_reg(0x5C)) == 0:
+    #t = 0b00000100 & g
+    #print(t)
+    #utime.sleep_ms(1000)
+
+    if ((0b00000100 & sensor.__read_reg(0x5C)) == 0):
         b_gain = sensor.__read_reg(0x01) / 0x40
         r_gain = sensor.__read_reg(0x02) / 0x40
         g_gain = sensor.__read_reg(0x03) / 0x40
@@ -59,7 +60,7 @@ def set_gain(gain_db):
 def set_custom_exposure(high_mean_thresh = 65, low_mean_thresh = 55):
     try:
         print("Starting Exposure Adjustment...")
-        cur_gain, r_gain, b_gain, g_gain = get_gain()
+        cur_gain = get_gain()[0]
         #b_gain_raw = sensor.__read_reg(0x01)
         #r_gain_raw = sensor.__read_reg(0x02)
         #g_gain_raw = sensor.__read_reg(0x03)
@@ -352,6 +353,12 @@ def toggle_flash():
 
 if __name__ == "__main__":
 
+    exposure_time_us = 4200
+    r_gain = 4
+    g_gain = 4
+    b_gain = 4
+    overall_gain = 7
+
     # \/ Setup Camera \/
 
     sensor.reset()
@@ -361,10 +368,10 @@ if __name__ == "__main__":
     clock = time.clock()
 
     # Analog gain introduces less noise than digital gain, we should use this before anything else
-    print("Initial analog gain register = " + bin(sensor.__read_reg(0x4D)))
-    print("Maxing out analog gain register and setting AWB/AGC...")
-    sensor.__write_reg(0x4D, 0b11111111)
-    print("Analog gain register pre AWB/AGC setting = " + bin(sensor.__read_reg(0x4D)))
+    #print("Initial analog gain register = " + bin(sensor.__read_reg(0x4D)))
+    #print("Maxing out analog gain register and setting AWB/AGC...")
+    ##sensor.__write_reg(0x4D, 0b11111111)
+    #print("Analog gain register pre AWB/AGC setting = " + bin(sensor.__read_reg(0x4D)))
 
     sensor.set_auto_gain(False, gain_db = overall_gain) # must be turned off for color tracking
     sensor.set_auto_whitebal(False, rgb_gain_db = (r_gain, g_gain, b_gain)) # must be turned off for color tracking
