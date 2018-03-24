@@ -1,17 +1,36 @@
-# Face Detection Example
-#
-# This example shows off the built-in face detection feature of the OpenMV Cam.
-#
-# Face detection works by using the Haar Cascade feature detector on an image. A
-# Haar Cascade is a series of simple area contrasts checks. For the built-in
-# frontalface detector there are 25 stages of checks with each stage having
-# hundreds of checks a piece. Haar Cascades run fast because later stages are
-# only evaluated if previous stages pass. Additionally, your OpenMV Cam uses
-# a data structure called the integral image to quickly execute each area
-# contrast check in constant time (the reason for feature detection being
-# grayscale only is because of the space requirment for the integral image).
-
 import sensor, utime, image
+
+def get_overlap_percent(roi1, roi2):
+    if len(roi1) != 4:
+        raise ValueError("roi1 is not a tuple that contains x, y, width, and height values.")
+    if len(roi2) != 4:
+        raise ValueError("roi1 is not a tuple that contains x, y, width, and height values.")
+
+    overlapping_pix_count = 0
+
+    for x_1 in range(roi1[0], roi1[0] + roi1[2]):
+        for y_1 in range(roi1[1], roi1[1] + roi1[3]):
+            if ((x_1 in range(roi2[0], roi2[0] + roi2[2])) & (y_1 in range(roi2[1], roi2[1] + roi2[3]))):
+                overlapping_pix_count += 1
+                #overlapping_piexls.append((roi1[0] + x_1, roi1[1] + y_1))
+
+    print(overlapping_pix_count)
+
+    total_unique_pix_count = roi1[2] * roi1[3] + roi2[2] * roi2[3] - overlapping_pix_count
+
+    print(total_unique_pix_count)
+
+    percent_overlapping = overlapping_pix_count/total_unique_pix_count
+
+    return percent_overlapping
+
+
+
+
+
+
+
+
 
 sensor.skip_frames(n = 100)
 
@@ -19,7 +38,7 @@ sensor.skip_frames(n = 100)
 sensor.reset()
 
 sensor.set_auto_gain(False)
-sensor.set_auto_exposure(False)
+sensor.set_auto_exposure(False, exposure_us = 1000) #arbitrary af
 sensor.set_auto_whitebal(True)
 
 
@@ -28,13 +47,16 @@ sensor.__write_reg(0x00, 113) #overall gain
 sensor.__write_reg(0x02, 16) #R gain
 sensor.__write_reg(0x03, 31) #G gain
 sensor.__write_reg(0x01, 48) #B gain
-'''
 sensor.__write_reg(0x08, 1) #exposure MSBs
 sensor.__write_reg(0x10, 18) #exposure_LSBs
-
+'''
 
 #sensor.set_windowing((320, 240))
 
+
+
+
+########## Take RGB image #########
 sensor.set_framesize(sensor.QVGA)
 sensor.set_pixformat(sensor.RGB565)
 sensor.skip_frames(n = 30)
@@ -50,32 +72,15 @@ raw_write.add_frame(img_RGB)
 raw_write.close()
 img_RGB.compress(quality = 100)
 img_RGB.save("img_" + str(img_id))
-print(raw_str)
-raw_read = image.ImageReader(raw_str)
-img_RGB = raw_read.next_frame(copy_to_fb = True, loop = False)
-raw_read.close()
-
-stage_one_good_thresholds = [(25, 100, -127, 2, -15, 15)]
-
-leaf_blobs = []
-
-for blob_index, stage_one_good_blob in enumerate(img_RGB.find_blobs(stage_one_good_thresholds, pixels_threshold=100, area_threshold=100, merge = False, margin = 15)):
-    rect_stats = img_RGB.get_statistics(roi = stage_one_good_blob.rect())
-
-    img_RGB.draw_rectangle(stage_one_good_blob.rect(), color = (0, 0, 0)) #black
-
-    leaf_blobs.append(stage_one_good_blob)
-
-print(leaf_blobs)
-
-sensor.flush()
-utime.sleep_ms(1000)
-img_RGB = None #DESTROY THE IMAGE!
+img_RGB = None
 
 
 
 
 
+
+
+########## Take GRAYSCALE image #########
 
 sensor.reset()
 sensor.set_framesize(sensor.QVGA)
@@ -93,6 +98,63 @@ raw_write.add_frame(img_GRAY)
 raw_write.close()
 img_GRAY.compress(quality = 100)
 img_GRAY.save("img_" + str(img_id))
+img_GRAY = None
+
+
+
+
+
+
+
+################ FIND LEAVES #########################
+
+raw_str = "raw_1_RGB_plant_10"
+raw_read = image.ImageReader(raw_str)
+img_RGB = raw_read.next_frame(copy_to_fb = True, loop = False)
+raw_read.close()
+
+roi1 = (10, 10, 15, 15)
+roi2 = (20, 10, 15, 15)
+
+img_RGB.draw_rectangle(roi1, color = (235, 255, 0))
+img_RGB.draw_rectangle(roi2, color = (0, 255, 0))
+
+print("ioverlappign....")
+print(get_overlap_percent(roi1 = roi1, roi2 = roi2))
+
+sensor.flush()
+utime.sleep_ms(100)
+sensor.flush()
+utime.sleep_ms(10000)
+
+stage_one_good_thresholds = [(25, 100, -127, 0, -10, 10)]
+
+leaf_blobs = []
+
+for blob_index, stage_one_good_blob in enumerate(img_RGB.find_blobs(stage_one_good_thresholds, pixels_threshold=100, area_threshold=100, merge = False, margin = 15)):
+    rect_stats = img_RGB.get_statistics(roi = stage_one_good_blob.rect())
+
+    img_RGB.draw_rectangle(stage_one_good_blob.rect(), color = (0, 0, 0)) #black
+
+    leaf_blobs.append(stage_one_good_blob)
+
+sensor.flush()
+utime.sleep_ms(1000)
+img_RGB = None #DESTROY THE IMAGE!
+
+
+
+
+
+
+
+
+
+
+
+################# FIND BEETLES INSIDE LEAVES #######################
+
+raw_str = "raw_1_GRAY_plant_10"
 raw_read = image.ImageReader(raw_str)
 img_GRAY = raw_read.next_frame(copy_to_fb = True, loop = False)
 raw_read.close()
@@ -118,22 +180,35 @@ for blob in leaf_blobs:
         else:
             pass
 
-        img_GRAY.draw_rectangle(blob.rect(), color = (0, 0, 0)) #black
-
     except Exception as e:
         print(e)
+
+for blob in leaf_blobs:
+    img_GRAY.draw_rectangle(blob.rect(), color = (0, 0, 0)) #black
 
 sensor.flush()
 utime.sleep_ms(3000)
 img_GRAY = None #DESTROY THE IMAGE!
 
 
+
+
+
+
+
+
+
+
+
+
+
+######################## PROCESS POTENTIAL BEETLES IN COLOR #####################
+
 '''
 L = Lightness where 0 is black and 100 is white
 A = -127 is green and 128 is red
 B = -127 is blue and 128 is yellow.
 '''
-
 
 raw_str = "raw_1_RGB_plant_10"
 raw_read = image.ImageReader(raw_str)
@@ -146,9 +221,10 @@ potential_beetles = []
 
 if feature_rois:
     print(feature_rois)
-    for feature in feature_rois:
+    for i, feature in enumerate(feature_rois):
         feature_stats = img_RGB.get_statistics(roi = feature[1])
-        print("feature_stats_" + str(feature_rois[0]) + str(feature_stats))
+        print("feature_stats_" + str(feature_rois[i]) + str(feature_stats))
+
         if feature_stats.a_mean() > 0 & feature_stats.b_mean() < 5:
             potential_beetles.append(feature[1])
 
@@ -159,7 +235,7 @@ if potential_beetles:
 
 if feature_rois:
     for feature in feature_rois: #do this last as to not have colored boxes impact your statistics
-        print("feature roi: " + str(feature_rois[0]) + str(feature[1]))
+        print("feature roi: " + str(feature[1]))
         img_RGB.draw_rectangle(feature[1], color = (0, 255, 255))
 
 
