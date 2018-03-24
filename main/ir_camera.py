@@ -318,19 +318,17 @@ def receive_msg():
 
 #################
 # Call this function to toggle the flash state, it will return the new flash state
+# The return value is the inverse of the pin value because of the inverting drive circuit
 
 def toggle_flash():
     # \/ This is the code to define a Pin, make it an output and set it high/low \/
-    #r_flash = pyb.Pin("P0", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
-    #g_flash = pyb.Pin("P1", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
-    #b_flash = pyb.Pin("P2", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
     ir_flash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
     if ir_flash.value() == 1:
         ir_flash.low()            # or p.value(0) to make the pin low (0V)
-        return 0
+        return 1
     elif ir_flash.value() == 0:
         ir_flash.high()           # or p.value(1) to make the pin high (3.3V)
-        return 1
+        return 0
     else:
         print("I can't let you do that Dave")
     return -1
