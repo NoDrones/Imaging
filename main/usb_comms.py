@@ -77,14 +77,13 @@ def send_img(img):
 		return -1
 	
 
-#Takes in a trigger(str) and a timeout in seconds (int)	
+#Takes in NOTHING
 #Timeout not implemented - may be unnecessary
-def listen_for_trigger(triggerstring):
+def listen_for_trigger():
 	while(1):
 		if port.isconnected(): # Listen for the command/trigger
 			cmd = recv_msg()[0].decode() # Looks for initialization command
-			if cmd == triggerstring:
-				return 1
+			return cmd
 				
 				
 				
