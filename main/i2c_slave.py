@@ -11,7 +11,7 @@ def send_packed_msg(packed_msg):
 
 	for msg in msg_list:
 		attempts, success = 0, False
-		while success == False and attempts < 5:
+		while success == False and attempts < 10:
 			print("Sending message. Attempt # %i" % attempts) # Attempt to send packed data with 5 second timeout
 			attempts = attempts + 1
 			try:
@@ -72,7 +72,7 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
 		packed_msg = listen_for_msg(msg_size_bytes = int(next_msg_size_bytes), msg_stage = 2)
 		if packed_msg == -1: # If an error occured in stage 2, exit stage 1
 			return -1
-			return ustruct.unpack(format_str, packed_msg)
+		return ustruct.unpack(format_str, packed_msg)
 
 	if msg_stage == 2: return i2c_data
 

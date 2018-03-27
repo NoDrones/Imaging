@@ -8,9 +8,6 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 		return -1
 
 	warning_bytes = warning_str.encode('ascii')
-	print("leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir:" + str(leaf_count[0]) + str(leaf_count[1]) + str(leaf_health[0]) + str(leaf_health[1]) + str(plant_ndvi))
-	str(plant_ir)
-
 	packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
 
 	return i2c_slave.send_packed_msg(packed_msg = packed_data)
@@ -22,13 +19,13 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 
 def send_calibration(warning_str = "none"):
 
-	format_str = "<5i50s"
+	format_str = "<4fi50s"
 	success = i2c_slave.send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
 	if success == False: return -1
 
 	warning_bytes = warning_str.encode('ascii')
-	# (overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value) = ir_camera.get_gain()
-	packed_calibration = ustruct.pack(format_str + "s", *(ir_gain.get_gain(), warning_bytes))
+	(overall_gain, r_gain, g_gain, b_gain, exposure_value) = ir_gain.get_gain()
+	packed_calibration = ustruct.pack(format_str + "s", overall_gain, r_gain, g_gain, b_gain, exposure_value, warning_bytes)
 
 	return i2c_slave.send_packed_msg(packed_msg = packed_calibration)
 
