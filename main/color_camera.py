@@ -128,7 +128,6 @@ if __name__ == "__main__":
 	img_number_str = last_photo_id_fd.write("696969")
 	print("Written bytes: " + str(img_number_str))
 	img_number_str = last_photo_id_fd.read()
-	print(int(img_number_str))
 	last_photo_id_fd.close()
 
 	# find the image number, source plant number from beaglebone
