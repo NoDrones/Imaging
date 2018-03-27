@@ -45,26 +45,26 @@ def recv_msg():
 				break
 		return msg #Returns raw bytes message	
 		
-	try:
-		stg1 = getln()
-		format_str_size = ustruct.unpack('@3s', stg1)[0] # Receive stage 1- the size of the format string
-		format_str_size = int(format_str_size.decode()) #Turns it back into an actual number
+	#try:
+	stg1 = getln()
+	format_str_size = ustruct.unpack('@3s', stg1)[0] # Receive stage 1- the size of the format string
+	format_str_size = int(format_str_size.decode()) #Turns it back into an actual number
 
-		format_stringception = '@%is' % format_str_size # The format string of the data's format string = format_stringception
-		#Receive stage 2 - the format string
-		stg2 = getln()
-		format_str = ustruct.unpack(format_stringception, stg2)[0]
-		format_str = format_str.decode()
+	format_stringception = '@%is' % format_str_size # The format string of the data's format string = format_stringception
+	#Receive stage 2 - the format string
+	stg2 = getln()
+	format_str = ustruct.unpack(format_stringception, stg2)[0]
+	format_str = format_str.decode()
+	
+	#Receive stage 3 - the Data
+	stg3 = getln()
+	data = ustruct.unpack(format_str, stg3)
+			
+	return data	
+	#except:
+		#return -1
 		
-		#Receive stage 3 - the Data
-		stg3 = getln()
-		data = ustruct.unpack(format_str, stg3)
-				
-		return data	
-	except:
-		return -1
-		
-#Takes in an uncompressed img and a USB_VCP object		
+#Takes in an uncompressed img 		
 def send_img(img):
 	try:
 		jpg = img.compressed() # Creates jpg byte object
@@ -77,7 +77,7 @@ def send_img(img):
 		return -1
 	
 
-#Takes in NOTHING
+
 #Timeout not implemented - may be unnecessary
 def listen_for_trigger():
 	while(1):
