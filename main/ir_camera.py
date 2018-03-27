@@ -28,7 +28,7 @@ def send_calibration(warning_str = "none"):
 
 	warning_bytes = warning_str.encode('ascii')
 	# (overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value) = ir_camera.get_gain()
-	packed_calibration = ustruct.pack(format_str + "s", *(ir_camera.get_gain(), warning_bytes))
+	packed_calibration = ustruct.pack(format_str + "s", *(ir_gain.get_gain(), warning_bytes))
 
 	return i2c_slave.send_packed_msg(packed_msg = packed_calibration)
 
