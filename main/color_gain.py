@@ -23,7 +23,9 @@ def get_gain():
 		b_gain = sensor.__read_reg(0x01) / 0x80
 		r_gain = sensor.__read_reg(0x02) / 0x80
 		g_gain = sensor.__read_reg(0x03) / 0x80
-	return (gain, r_gain, g_gain, b_gain)
+    # Exposure time = exposure_value*T(row_interval) ... not sure what T(row_interval) is, but this sounds linear
+    exposure_value = sensor.__read_reg(0x08)
+	return (gain, r_gain, g_gain, b_gain, exposure_value)
 
 def set_gain(gain_db):
 	# gain_correlation_equation = 20*log(gain_db) = 30*(index)/79
