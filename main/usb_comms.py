@@ -14,15 +14,15 @@ port.setinterrupt(-1)
 #EVEN IF YOU ARE JUST SENDING ONE STRING, PUT IT IN A TUPLE BY ITSELF as (b'string',)
 #fmtstr is a str
 #Condition data as such before calling the function
-def send_msg(fmtstr,msg):
+def send_msg(format_str, msg):
 	#Stage 1: Length of message's format string
-	fmtstrsize = len(fmtstr)
-	stg1_msg = ustruct.pack('@i',fmtstrsize)
+	format_str_size = len(format_str)
+	stg1_msg = ustruct.pack('@i', format_str_size)
 	
-	stg2_fmtstr = '@%is' % (fmtstrsize) # Format-stringception
-	stg2_msg = ustruct.pack(stg2_fmtstr,fmtstr.encode()) #Stage 2: Send The message's format string
+	stg2_format_str = '@%is' % (format_str_size) # Format-stringception
+	stg2_msg = ustruct.pack(stg2_format_str, format_str.encode()) #Stage 2: Send The message's format string
 	
-	stg3_msg = ustruct.pack(fmtstr,*msg) #Stage 3: The data tuple
+	stg3_msg = ustruct.pack(format_str, *msg) #Stage 3: The data tuple
 	
 	#Write the message(s) to the port
 	try:
@@ -47,18 +47,18 @@ def recv_msg():
 		
 	try:
 		stg1 = getln()
-		fmtstr_size = ustruct.unpack('@3s',stg1)[0] # Receive stage 1- the size of the format string
-		fmtstr_size = int(fmtstr_size.decode()) #Turns it back into an actual fucking number
+		format_str_size = ustruct.unpack('@3s', stg1)[0] # Receive stage 1- the size of the format string
+		format_str_size = int(format_str_size.decode()) #Turns it back into an actual number
 
-		fmtstringception = '@%is' % fmtstr_size # The format string of the data's format string = fmtstringception
+		format_stringception = '@%is' % format_str_size # The format string of the data's format string = format_stringception
 		#Receive stage 2 - the format string
 		stg2 = getln()
-		fmtstr = ustruct.unpack(fmtstringception,stg2)[0]
-		fmtstr = fmtstr.decode()
+		format_str = ustruct.unpack(format_stringception, stg2)[0]
+		format_str = format_str.decode()
 		
 		#Receive stage 3 - the Data
 		stg3 = getln()
-		data = ustruct.unpack(fmtstr,stg3)
+		data = ustruct.unpack(format_str, stg3)
 				
 		return data	
 	except:
@@ -68,8 +68,8 @@ def recv_msg():
 def send_img(img):
 	try:
 		jpg = img.compressed() # Creates jpg byte object
-		sz = jpg.size()
-		packed_size = ustruct.pack('@i',sz)
+		size = jpg.size()
+		packed_size = ustruct.pack('@i', size)
 		port.write(packed_size)
 		port.send(jpg)  #using port.write() doesn't send the full object for some reason - must have some bytes limit
 		return 1
@@ -82,8 +82,8 @@ def send_img(img):
 def listen_for_trigger():
 	while(1):
 		if port.isconnected(): # Listen for the command/trigger
-			cmd = recv_msg()[0].decode() # Looks for initialization command
-			return cmd
+			command = recv_msg()[0].decode() # Looks for initialization command
+			return command
 				
 				
 				

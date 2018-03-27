@@ -22,25 +22,38 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 
 def send_calibration(warning_str = "none"):
 
-    (overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value) = ir_camera.get_gain()
-
     format_str = "<5i50s"
     success = i2c_slave.send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
     if success == False: return -1
 
     warning_bytes = warning_str.encode('ascii')
-    packed_calibration = ustruct.pack(format_str + "s", overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value, warning_bytes)
+    # (overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value) = ir_camera.get_gain()
+    packed_calibration = ustruct.pack(format_str + "s", *ir_camera.get_gain(), warning_bytes)
 
     return i2c_slave.send_packed_msg(packed_msg = packed_calibration)
 
 #################
-# I might want to end up just using a ISR on a GPIO pin for this... but interrupts in uPython feels like using a fireplace to reflow a PCB, sure it might be possible, but there will be a lot of smoke and we probably shouldn't trust whatever comes out
-
+# This function only utilizes the first half of our normal message protocol, send_next_msg_format() is just a flag
+# to prepare the reciever for whatever comes next, for a trigger this flag is all we need.
 def send_trigger():
     # Don't need to specify a next_msg_format_str because this message is treated differently
     success = i2c_slave.send_next_msg_format(next_msg_type_str = "trigger")
     if success == False: return -1
     return 1
+
+#################
+# Call this function to toggle the flash state, it will return the new flash state.
+# The return value is the inverse of the pin value because of the inverting drive circuit
+def toggle_flash(): # Call this function to toggle the flash state, it will return the new flash state. The return value is the inverse of the pin value because of the inverting drive circuit
+    ir_flash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
+    if ir_flash.value() == 1:
+        ir_flash.low() # or p.value(0) to make the pin low (0V)
+        return 1
+    elif ir_flash.value() == 0:
+        ir_flash.high() # or p.value(1) to make the pin high (3.3V)
+        return 0
+    else:
+        return -1
 
 if __name__ == "__main__":
 
@@ -88,7 +101,8 @@ if __name__ == "__main__":
     # ensures the flash turns off
     while (toggle_flash() != 0): continue
 
-    ## \/ Name & Save Image \/ |||||  Save raw image, save compressed image, load back in raw image for processing. It is necessary we reload the raw image because compressing it (needed for saving jpeg) overwrites the raw file in the heap, and the heap can't handle two pictures so we then have to reload it.
+    ## \/ Name & Save Image \/
+    # Save raw image, save compressed image, load back in raw image for processing.
     # should pull img_number from a text file and read the plant_id from a qr code or beaglebone || default mode is pyb.usb_mode('VCP+MSC')
     pyb.usb_mode('VCP+HID')
     utime.sleep_ms(1000)

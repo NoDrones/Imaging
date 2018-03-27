@@ -8,8 +8,6 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
         return -1
 
     warning_bytes = warning_str.encode('ascii')
-    print("leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir:" + str(leaf_count[0]) + str(leaf_count[1]) + str(leaf_health[0]) + str(leaf_health[1]) + str(plant_ndvi))
-    str(plant_ir)
 
     packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
 
@@ -19,41 +17,32 @@ def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_i
 # In general you shouldn't specify next_msg_format_str - as long as we always call send_msg_format()
 # at the begining of each communication it is unneccesary. Only specify this variable if you plan on
 # sending a custom message after without calling send_msg_format() first.
-
 def send_calibration(warning_str = "none"):
-
-    (overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value) = ir_camera.get_gain()
 
     format_str = "<5i50s"
     success = i2c_master.send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
     if success == False: return -1
 
     warning_bytes = warning_str.encode('ascii')
-    packed_calibration = ustruct.pack(format_str + "s", overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value, warning_bytes)
+
+    # (overall_gain, rgb_gain[0], rgb_gain[1], rgb_gain[2], exposure_value) = ir_camera.get_gain()
+    packed_calibration = ustruct.pack(format_str + "s", *ir_camera.get_gain(), warning_bytes)
 
     return i2c_master.send_packed_msg(packed_msg = packed_calibration)
 
 #################
-# I might want to end up just using a ISR on a GPIO pin for this... but interrupts in uPython feels like using a fireplace to reflow a PCB, sure it might be possible, but there will be a lot of smoke and we probably shouldn't trust whatever comes out
-
+# This function only utilizes the first half of our normal message protocol, send_next_msg_format() is just a flag
+# to prepare the reciever for whatever comes next, for a trigger this flag is all we need.
 def send_trigger():
     # Don't need to specify a next_msg_format_str because this message is treated differently
     success = i2c_master.send_next_msg_format(next_msg_type_str = "trigger")
     if success == False: return -1
     return 1
 
-
-# This function was designed to receive a format string and return the unpacked tuple.
-# To listen and wait for direction from the sender simply call listen_for_msg and specify a
-# long wait_time, without a format_str argument you should expect to receive back a two string
-# tuple, with the first string specifying a type or delivering a message, and the second string
-# specifying the next_msg_format_str that should be used upon calling listen_for_msg() again.
-#
-# 1st msg_stage receives a 4 byte integer specifying the next message size
-# 2nd msg_stage recursively returns the next packed_data, which the 1st msg_stage unpacks
-# based on the format_str specifier it was given, and returns the tuple
-
-def toggle_flash(): # Call this function to toggle the flash state, it will return the new flash state. The return value is the inverse of the pin value because of the inverting drive circuit
+#################
+# Call this function to toggle the flash state, it will return the new flash state.
+# The return value is the inverse of the pin value because of the inverting drive circuit
+def toggle_flash():
     ir_flash = pyb.Pin("P3", pyb.Pin.OUT_PP, pyb.Pin.PULL_NONE)
     if ir_flash.value() == 1:
         ir_flash.low() # or p.value(0) to make the pin low (0V)
@@ -62,7 +51,6 @@ def toggle_flash(): # Call this function to toggle the flash state, it will retu
         ir_flash.high() # or p.value(1) to make the pin high (3.3V)
         return 0
     else:
-        print("I can't let you do that Dave")
         return -1
 
 if __name__ == "__main__":
