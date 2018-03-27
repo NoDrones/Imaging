@@ -193,4 +193,3 @@ if __name__ == "__main__":
 	else: print("Even your unhealthy leaves are healthy!")
 
 	sensor.flush()
-	utime.sleep_ms(3000)
