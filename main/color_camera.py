@@ -53,7 +53,6 @@ def toggle_flash():
 
 if __name__ == "__main__":
 
-<<<<<<< HEAD
 	# \/ Setup Camera \/
 
 	sensor.reset()
