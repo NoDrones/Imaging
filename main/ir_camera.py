@@ -132,6 +132,7 @@ if __name__ == "__main__":
 
 	healthy_leaf_thresholds, unhealthy_leaf_thresholds, bad_thresholds = [(170, 255)], [(80, 120)], [( 0, 50)]
 	healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
+	healthy_leaves, unhealthy_leaves = 0, 0
 	healthy_mean, unhealthy_mean = 0, 0
 	blob_found, leaf_blob_index = False, 0
 
