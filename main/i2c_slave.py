@@ -1,4 +1,4 @@
-import utime, pyb, ustruct
+import time, utime, pyb, ustruct
 
 i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
 i2c_obj.deinit() # Fully reset I2C device...
