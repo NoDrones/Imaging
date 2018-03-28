@@ -55,15 +55,15 @@ def recv_img():
 
 ############################################
 ## Saves image to disk and uploads to FTP server
-def save_img(raw_img, plant_id):
+def save_img(raw_img, plant_id,img_number):
 	#Write the image to a file
-	filename = 'testimg%i.jpg' % plant_id
+	filename = '%iplant_%i.jpg' % (img_number,plant_id)
 	imgfile = open(filename,'w')
 	imgfile.write(raw_img)
 	imgfile.close()
 	
 	#Upload the image to the hosting site
-	dbConnect.add_img(filename,ftp)
+	dbConnect.add_img(filename)
 	
 	return filename
 
@@ -81,21 +81,38 @@ def calibrate_camera():
 	else:
 		return -1
 			
-################################################
+######################################################
 ## Sends command to camera to take pics & collect data
-def collect_data(plant_id):
+## Takes in 2 ints with plant_id and image number
+def collect_data(plant_id,img_number):
+
+	## Send initialization trigger
 	cmd = (b'Go',)
 	formatstr = '@%is' % len(cmd[0])
 	success = send_msg(formatstr,cmd)
+	
+	#Send image information
+	data = (plant_id,img_number)
+	success = send_msg('@2i',data)
+	
 	if success==1:
-		data = recv_msg()
-		#ADD DATA TO DATABASE HERE (dbConnect.add_vals(cnx,cur))
-		print data
 		raw_img = recv_img()
-		imgfile = save_img(raw_img,plant_id)
+		imgfile = save_img(raw_img,plant_id,img_number)
 		print '%s saved & uploaded!' % imgfile
+		data = recv_msg()
+		
+		#ADD DATA TO DATABASE HERE
+		tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))
+		#Collect all of the below data:
+		#vals = (tstamp,location_no,insects_present,imgfile,ndvi_val,ir_val,hlc,ulc)
+		#dbConnect.add_measurement(vals)
+		#dbConnect.update_locations(location_no,imgfile,tstamp)
+		print data
 		return (data,imgfile)
 
+		
+##########################################
+### Tells camera to stop.	
 def stop():
 	cmd = (b'Stop',)
 	formatstr = '@%is' % len(cmd[0])
@@ -106,8 +123,14 @@ def stop():
 		return 1
 	else:
 		return -1
+
 		
+##########################################
+## What will soon be the main loop: sends calibration command, moves motor, and collects data.
 def mainloop():
+	#Query database and wait for start command
+	
+
 	### Move motor to calibration position
 	calibrate_camera()
 	
@@ -126,8 +149,6 @@ except:
 	port = Serial(port='/dev/ttyACM1',baudrate=115200,timeout=5)	
 
 
-#Set up Database and FTP connections
-(cnx,cur,ftp) = dbConnect.est_connections()
 		
 
 

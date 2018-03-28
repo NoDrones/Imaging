@@ -86,17 +86,13 @@ if __name__ == "__main__":
 			# \/ Send Calibration & Wait \/
 
 			success = send_calibration()
-			print("Failed to send calibration." if success == -1 else "Calibration sent.")
 
 			# Flash_time should be based on exposure time
 			flash_time_ms = 250
 
 			# receive what we expect to be a trigger
 			msg_type = i2c_master.receive_msg()
-			if msg_type == -1:
-				print("Could not receive message.")
-			elif "trigger" not in msg_type:
-				print("Unexpected msg_type: " + str(msg_type))
+
 			
 			
 			success = usb_comms.send_msg('@20s',(b'Calibration Complete',))
@@ -107,7 +103,13 @@ if __name__ == "__main__":
 		### PHOTO & DATA COLLECTION TRIGGER
 		############################################
 		elif command=='Go':
-					
+			
+			# collect plant_id and image number from Beaglebone
+			msg = usb_comms.recv_msg()
+			img_number = msg[1]
+			plant_id = msg[0]
+
+			
 			# \/ Take Photo \/
 
 			# ensures the flash turns on
@@ -133,18 +135,7 @@ if __name__ == "__main__":
 			# default mode is pyb.usb_mode('VCP+MSC')
 			pyb.usb_mode('VCP+HID')
 			utime.sleep_ms(1000)
-			last_photo_id_path = "last_photo_id.txt"
-			last_photo_id_fd = open(last_photo_id_path, "w+")
-			img_number_str = last_photo_id_fd.read()
-			print(img_number_str)
-			img_number_str = last_photo_id_fd.write("696969")
-			print("Written bytes: " + str(img_number_str))
-			img_number_str = last_photo_id_fd.read()
-			last_photo_id_fd.close()
-
-			# find the image number, source plant number from beaglebone
-			img_number = 4
-			plant_id = 1
+			
 			img_id = str(img_number) + "plant_" + str(plant_id)
 			raw_str = "raw_" + str(img_id)
 			raw_write = image.ImageWriter(raw_str)
@@ -154,6 +145,8 @@ if __name__ == "__main__":
 			# save a jpeg
 			img.compress(quality = 100)
 			img.save("img_" + str(img_id))
+			#send the jpeg to Beaglebone
+			img_sent = usb_comms.send_img(img)
 
 			# reload the raw
 			raw_read = image.ImageReader(raw_str)
@@ -164,10 +157,6 @@ if __name__ == "__main__":
 
 			# receive ir_data before continuing
 			msg_type = i2c_master.receive_msg()
-			if msg_type == -1:
-				print("Could not receive message.")
-			elif "data" not in msg_type:
-				print("Unexpected msg_type: " + str(msg_type))
 
 			# now perform measurements on your own image
 			img_hist = img.get_histogram()
@@ -184,16 +173,14 @@ if __name__ == "__main__":
 
 			for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
 				blob_found = True
-				print("leaf blob found: ")
-				print(leaf_blob.rect())
+
 				img.draw_rectangle(leaf_blob.rect(), color = (0, 0, 100))
 				leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
 				# want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
 				leaf_rect_pix_a_sum = leaf_rect_stats.a_mean() * leaf_blob[2] * leaf_blob[3]
 				leaf_area = leaf_blob[2] * leaf_blob[3]
 				for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
-					print("bad blob found: ")
-					print(bad_blob.rect())
+
 					img.draw_rectangle(bad_blob.rect(), color = (100, 0, 0))
 					bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
 					# more undoing of mean function
@@ -205,21 +192,29 @@ if __name__ == "__main__":
 
 				leaf_rect_a_mean = leaf_rect_stats.a_mean()
 				leaf_a_mean = leaf_rect_pix_a_sum / leaf_area
-				print("leaf a mean = %i [outer a mean = %i]" % (leaf_a_mean, leaf_rect_a_mean))
+
 				# the below function does not take into account the size of a leaf... each leaf is weighted equally
 				leaves_mean_a_sum = leaves_mean_a_sum + leaf_a_mean
 
 			# calculates the average value for the healthy leaves regardless of leaf size
 			if (blob_found):
 				a_mean = leaves_mean_a_sum / (leaf_blob_index + 1)
-
+			
+			
+			##############SEND DATA TO BEAGLEBONE###############
+			data_to_send = (420,69)
+			data_sent = usb_comms.send_msg('@2i',data_to_send)
+			
 			##############SAVE DATA AND IMAGE TO SD CARD###############
 			##############SAVE DATA AND IMAGE TO SD CARD###############
 
-			##############SEND DATA AND IMAGE TO BEAGLEBONE###############
-			##############SEND DATA AND IMAGE TO BEAGLEBONE###############
+
 			sensor.flush()
-
+		
+		####################################################
+		### STOP TRIGGER
+		####################################################
+		
 		elif command=='Stop':
 			success = usb_comms.send_msg('@17s',(b'Sequence Complete',))
 			if success==1:
