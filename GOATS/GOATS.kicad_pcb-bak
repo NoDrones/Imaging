@@ -2345,7 +2345,7 @@
   )
 
   (gr_circle (center 69.5 78) (end 71.15 78) (layer B.Paste) (width 0.2))
-  (gr_line (start 163.06 34) (end 163.06 123) (angle 90) (layer Edge.Cuts) (width 0.15) (tstamp 5ABC0512))
+  (gr_line (start 163 34) (end 163 123) (angle 90) (layer Edge.Cuts) (width 0.15) (tstamp 5ABC0512))
   (gr_line (start 163.06 123) (end 66 123) (angle 90) (layer Edge.Cuts) (width 0.15))
   (gr_line (start 66 34) (end 66 123) (angle 90) (layer Edge.Cuts) (width 0.15))
   (gr_line (start 66 34) (end 163.06 34) (angle 90) (layer Edge.Cuts) (width 0.15))
