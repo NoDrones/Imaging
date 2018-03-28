@@ -90,8 +90,8 @@ def update_locations(loc_no,image,tstamp):
     cnx.commit()
     return 1
 	
-def add_img(filename):
-	f = open(filename,'rb')
+def add_img(filename,filepath):
+	f = open(filepath,'rb')
 	cmd = 'STOR %s' % filename
 	while(1):
 		try:
