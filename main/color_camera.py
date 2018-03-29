@@ -106,9 +106,8 @@ if __name__ == "__main__":
 			
 			# collect plant_id and image number from Beaglebone
 			msg = usb_comms.recv_msg()
-			img_number = msg[1]
 			plant_id = msg[0]
-
+			img_number = msg[1]
 			
 			# \/ Take Photo \/
 
