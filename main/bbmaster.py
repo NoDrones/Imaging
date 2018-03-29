@@ -86,7 +86,7 @@ def calibrate_camera():
 ######################################################
 ## Sends command to camera to take pics & collect data
 ## Takes in 2 ints with plant_id and image number
-def collect_data(plant_id,img_number):
+def collect_data(plant_id):
 
 	while(1):
 		try:
@@ -96,18 +96,20 @@ def collect_data(plant_id,img_number):
 			success = send_msg(formatstr,cmd)
 			
 			#Send image information
-			data = (plant_id,img_number)
-			success = send_msg('@ii',data)
+			data = (plant_id)
+			success = send_msg('@i',data)
 			
 			if success==1:
 				raw_img = recv_img()
-				imgfile = save_img(raw_img,plant_id,img_number)
+				imgfile = save_img(raw_img,plant_id)
 				#print '%s saved & uploaded!' % imgfile
 				data = recv_msg()
 				
+				###########################
 				#ADD DATA TO DATABASE HERE
+				###########################
 				tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))
-				#Collect all of the below data:
+				#Collect all of the below data from the data tuple:
 				#vals = (tstamp,location_no,insects_present,imgfile,ndvi_val,ir_val,hlc,ulc)
 				#dbConnect.add_measurement(vals)
 				#dbConnect.update_locations(location_no,imgfile,tstamp)
@@ -121,22 +123,9 @@ def collect_data(plant_id,img_number):
 	return (data,imgfile)
 			
 
-		
-##########################################
-### Tells camera to stop.	
-def stop():
-	cmd = (b'Stop',)
-	formatstr = '@%is' % len(cmd[0])
-	success = send_msg(formatstr,cmd)
-	if success==1:
-		data = recv_msg()
-		print data[0].decode()
-		return 1
-	else:
-		return -1
 
 ##########################################
-### Tells a dummy tuple to test serial port.	
+### Sends a dummy tuple to test serial port.	
 def test_port():
 	cmd = (b'Testing',)
 	formatstr = '@%is' % len(cmd[0])
@@ -147,7 +136,6 @@ def test_port():
 		return 1
 	else:
 		return -1
-
 
 		
 ##########################################
@@ -170,6 +158,8 @@ port = Serial(port='/dev/ttyACM0',baudrate=115200,timeout=5)
 if test_port()!=1:
 	port = Serial(port='/dev/ttyACM1',baudrate=115200,timeout=5)	
 	
+
+
 
 
 		
