@@ -25,27 +25,27 @@ sensor.set_pixformat(sensor.GRAYSCALE)
 
 # Load Haar Cascade
 # By default this will use all stages, lower satges is faster but less accurate.
-beetle_cascade = image.HaarCascade("/isolated_minimal_rotation_low_FA_3_stage.cascade", stages=3)
+beetle_cascade = image.HaarCascade("/classifier_iso_min_rotation_low_FA_12_stage.cascade", stages=12)
 
 
 # FPS clock
 clock = time.clock()
 
 while (True):
-    clock.tick()
+	clock.tick()
 
-    # Capture snapshot
-    img = sensor.snapshot()
+	# Capture snapshot
+	img = sensor.snapshot()
 
-    # Find objects.
-    # Note: Lower scale factor scales-down the image more and detects smaller objects.
-    # Higher threshold results in a higher detection rate, with more false positives.
-    objects = img.find_features(beetle_cascade, threshold=1, scale_factor=1.2)
+	# Find objects.
+	# Note: Lower scale factor scales-down the image more and detects smaller objects.
+	# Higher threshold results in a higher detection rate, with more false positives.
+	objects = img.find_features(beetle_cascade, threshold=1, scale_factor=1.2)
 
-    # Draw objects
-    for r in objects:
-        img.draw_rectangle(r)
+	# Draw objects
+	for r in objects:
+		img.draw_rectangle(r)
 
-    # Print FPS.
-    # Note: Actual FPS is higher, streaming the FB makes it slower.
-    print(clock.fps())
+	# Print FPS.
+	# Note: Actual FPS is higher, streaming the FB makes it slower.
+	print(clock.fps())
