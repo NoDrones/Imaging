@@ -1,42 +1,16 @@
 import sensor, image, time, utime, pyb, ustruct, os, ir_gain, i2c_slave
 
-def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
+def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ir = 0, warning_str = "none"):
 
-	format_str = "<2i4f50s"
+	format_str = "<2i3f50s"
 	success = i2c_slave.send_next_msg_format(next_msg_type_str = "data")
 	if success == False:
 		return -1
 
 	warning_bytes = warning_str.encode('ascii')
-	packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
+	packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ir, warning_bytes)
 
 	return i2c_slave.send_packed_msg(packed_msg = packed_data)
-
-#################
-# In general you shouldn't specify next_msg_format_str - as long as we always call send_msg_format()
-# at the begining of each communication it is unneccesary. Only specify this variable if you plan on
-# sending a custom message after without calling send_msg_format() first.
-
-def send_calibration(warning_str = "none"):
-
-	format_str = "<4fi50s"
-	success = i2c_slave.send_next_msg_format(next_msg_type_str = "calibration", next_msg_format_str = format_str)
-	if success == False: return -1
-
-	warning_bytes = warning_str.encode('ascii')
-	(overall_gain, r_gain, g_gain, b_gain, exposure_value) = ir_gain.get_gain()
-	packed_calibration = ustruct.pack(format_str + "s", overall_gain, r_gain, g_gain, b_gain, exposure_value, warning_bytes)
-
-	return i2c_slave.send_packed_msg(packed_msg = packed_calibration)
-
-#################
-# This function only utilizes the first half of our normal message protocol, send_next_msg_format() is just a flag
-# to prepare the reciever for whatever comes next, for a trigger this flag is all we need.
-def send_trigger():
-	# Don't need to specify a next_msg_format_str because this message is treated differently
-	success = i2c_slave.send_next_msg_format(next_msg_type_str = "trigger")
-	if success == False: return -1
-	return 1
 
 #################
 # Call this function to toggle the flash state, it will return the new flash state.
@@ -54,143 +28,158 @@ def toggle_flash(): # Call this function to toggle the flash state, it will retu
 
 if __name__ == "__main__":
 
+	# \/ Setup Camera \/
 	sensor.reset()
-	sensor.set_pixformat(sensor.GRAYSCALE)
+	sensor.set_pixformat(sensor.RGB565)
 	sensor.set_framesize(sensor.QVGA)
 	sensor.skip_frames(time = 2000)
 	clock = time.clock()
-
-	# Analog gain introduces less noise than digital gain, we should use this before anything else
-	print("Initial analog gain register = " + bin(sensor.__read_reg(0x4D)))
-	print("Maxing out analog gain register and setting AWB/AGC...")
-	sensor.__write_reg(0x4D, 0b11111111)
-	print("Analog gain register pre AWB/AGC setting = " + bin(sensor.__read_reg(0x4D)))
-
-	sensor.set_auto_gain(False) # must be turned off for color tracking
-	sensor.set_auto_whitebal(False) # must be turned off for color tracking
-	sensor.set_auto_exposure(False)
-
-	print("Analog gain register post AWB/AGC setting = " + bin(sensor.__read_reg(0x4D))) # Analog gain introduces less noise than digital gain, we should use this before anything else
-
-	while toggle_flash() != 1: pass # turn flash on for calibration
-	ir_gain.set_custom_exposure() # Now set the exposure
-	while toggle_flash() != 0: pass # turn flash off after calibration
-
-	# \/ Receive Calibration \/
-	# Calling receive_message will also trigger action if directed by sender, such as performing calibration, or passing on/storing data, or taking a photo/flashing the light source
-	# The returned msg_type can be used to verify the expected action took place if desired, and react if necessary (such as repeat a process)
-
-	# IR camera waits for calibration directions from the color camera
-	msg_type = i2c_slave.receive_msg()
-	if msg_type == -1: print("Could not receive message.")
-	elif "calibration" not in msg_type: print("Unexpected msg_type: " + str(msg_type))
-
-	flash_time_ms = 250 # Set flash_time to be greater than exposure time
-
-	if send_trigger() == -1: print("Trigger unsuccessful") 	# Trigger light source/color camera
-
-	while toggle_flash() != 1: continue # ensures the flash turns on
-
-	utime.sleep_ms(25)
-	img = sensor.snapshot()         # Take a picture and return the image.
-	utime.sleep_ms(int(flash_time_ms - 25))
-
-	# ensures the flash turns off
-	while (toggle_flash() != 0): continue
-
-	## \/ Name & Save Image \/
-	# Save raw image, save compressed image, load back in raw image for processing.
-	# should pull img_number from a text file and read the plant_id from a qr code or beaglebone || default mode is pyb.usb_mode('VCP+MSC')
+	# If something that used to work isnt now try using 'VCP+MSC'
 	pyb.usb_mode('VCP+HID')
 	utime.sleep_ms(1000)
 	last_photo_id_path = "last_photo_id.txt"
-	last_photo_id_fd = open(last_photo_id_path, "w+")
-	img_number_str = last_photo_id_fd.read()
-	print(img_number_str)
-	img_number_str = last_photo_id_fd.write("696969")
-	print("Written bytes: " + str(img_number_str))
-	img_number_str = last_photo_id_fd.read()
-	print(img_number_str)
-	last_photo_id_fd.close()
+	last_photo_id_fd = open(last_photo_id_path, "r+")
+	img_number_str = last_photo_id_fd.read() # Read image number to file
+	if len(img_number_str) == 0: img_number_str = "0" # If no number is read, start at 0
+	last_photo_id_fd.close() # Close file
 
-	img_number, plant_id = 4, 1
-	img_id = str(img_number) + "plant_" + str(plant_id)
-	raw_str = "raw_" + str(img_id)
-	raw_write = image.ImageWriter(raw_str)
-	raw_write.add_frame(img)
-	raw_write.close()
+	healthy_leaf_thresholds, unhealthy_leaf_thresholds, bad_thresholds = (170, 255), (80, 120), (0, 50)
+	flash_time_ms = 250 # Set flash_time to be greater than exposure time
+	warning = "none"
+	calibrated = False
+	metadata_str = ""
 
-	img.compress(quality = 100)
-	img.save("img_" + str(img_id))
+	while(1): #Begin the loop that listens for Beaglebone commands
+		# since we are expecting a command, we don't need to worry about the second value in tuple (next_msg_format_str)
+		command = i2c_slave.receive_msg()[0]
 
-	raw_read = image.ImageReader(raw_str)
-	img = raw_read.next_frame(copy_to_fb = True, loop = False)
-	raw_read.close()
+		if "calibrate" in command:
+			# Analog gain introduces less noise than digital gain so we maximize it
+			sensor.__write_reg(0x4D, 0b11111111)
+			while toggle_flash() != 1: pass # turn flash on for calibration
+			sensor.set_auto_gain(False) # must be turned off for color tracking
+			sensor.set_auto_whitebal(False) # must be turned off for color tracking
+			sensor.set_auto_exposure(False)
 
-	img_hist = img.get_histogram()
-	img_stats = img_hist.get_statistics()
+			if ir_gain.set_custom_exposure() == -1: warning = "set_custom_exposure error"
+			while toggle_flash() != 0: pass # turn flash off after calibration
 
-	healthy_leaf_thresholds, unhealthy_leaf_thresholds, bad_thresholds = [(170, 255)], [(80, 120)], [( 0, 50)]
-	healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
-	healthy_leaves, unhealthy_leaves = 0, 0
-	healthy_mean, unhealthy_mean = 0, 0
-	blob_found, leaf_blob_index = False, 0
+			# Fill metadata_str with calibration information
+			new_metadata_tuple = ir_gain.get_gain()
+			for morsel in new_metadata_tuple:
+				metadata_str = metadata_str + str(morsel) + ","
+			metadata_str = metadata_str + warning + "\n" #(gain,r_gain,g_gain,b_gain,exposure_value,calibration_warning,"\n")
 
-	for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
-		blob_found = True
-		print("leaf blob found: " + str(leaf_blob.rect()))
-		img.draw_rectangle(leaf_blob.rect(), color = 255)
-		leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
-		leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
-		leaf_area = leaf_blob[2] * leaf_blob[3]
+			# Append thresholds to metadata_str
+			new_metadata_tuple = (healthy_leaf_thresholds[0], healthy_leaf_thresholds[1], unhealthy_leaf_thresholds[0], unhealthy_leaf_thresholds[1], bad_thresholds[0], bad_thresholds[1])
+			for morsel in new_metadata_tuple:
+				metadata_str = metadata_str + str(morsel) + ","
+			metadata_str = metadata_str[:-1] + "\n" #(healthy_leaf_thresholds_lo,healthy_leaf_thresholds_hi,unhealthy_leaf_thresholds_lo,unhealthy_leaf_thresholds_hi,bad_thresholds_lo,bad_thresholds_hi,"\n")
+			calibrated = True
 
-		for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=50, area_threshold=50, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
-			print("bad blob found: " + str(bad_blob.rect()))
-			img.draw_rectangle(bad_blob.rect(), color = 127)
-			bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
-			bad_rect_pix_sum = bad_rect_stats.mean() * bad_blob[2] * bad_blob[3] # more undoing of mean function
-			leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
-			leaf_area = leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
+		elif "trigger" in command:
 
-		print("healthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
-		healthy_leaves_mean_sum = healthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
+			data_str = ""
+			# is this the best way to get the plant_id?
+			if "plant_id" in i2c_slave.receive_msg()[0]: plant_id = i2c_slave.listen_for_msg(format_str = "<i")[0]
+			else: plant_id = 0
 
-	# calculates the average value for the healthy leaves regardless of leaf size
-	if (blob_found == True):
-		healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
+			while toggle_flash() != 1: continue # ensures the flash turns on
+			utime.sleep_ms(25)
+			img = sensor.snapshot() # Take a picture and return the image.
+			utime.sleep_ms(int(flash_time_ms - 25))
+			while (toggle_flash() != 0): continue # ensures the flash turns off
 
-	healthy_leaves = (leaf_blob_index + 1)
-	blob_found = False
+			# set next_img_number, save raw and jpeg, reload raw
+			next_img_number = int(img_number_str) + 1
+			last_photo_id_fd = open(last_photo_id_path, "w+") # Open file and truncate
+			if last_photo_id_fd.write(str(next_img_number)) < 1: warning = "insufficient next_img_number bytes written" # Write next_img_number
+			last_photo_id_fd.close() # Close file
 
-	for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(unhealthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
-		blob_found = True
-		print("leaf blob found: " + str(leaf_blob.rect()))
-		img.draw_rectangle(leaf_blob.rect(), color = 255)
-		leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
-		leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
-		leaf_area = leaf_blob[2] * leaf_blob[3]
-		for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
-			print("bad blob found: ", bad_blob.rect())
-			img.draw_rectangle(bad_blob.rect(), color = 127)
-			bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
-			bad_rect_pix_sum = bad_rect_stats.mean()*bad_blob[2]*bad_blob[3] # more undoing of mean function
-			leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
-			leaf_area = leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
+			img_id_str = str(next_img_number) + "_plant_" + str(plant_id)
+			raw_str = "raw_" + img_id_str
+			raw_write = image.ImageWriter(raw_str)
+			raw_write.add_frame(img)
+			raw_write.close()
 
-		print("unhealthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
-		unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
+			# save metadata file
+			img_metadata_path = "metadata_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
+			img_metadata_fd = open(img_metadata_path, "w+")
+			if img_metadata_fd.write(metadata_str) < 1: warning = "insufficient metadata bytes written" # Write metadata to text file
+			img_metadata_fd.close() # Close file
 
-	if (blob_found == True): # calculates the average value for the unhealthy leaves regardless of leaf size
-		unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
-		unhealthy_leaves = (leaf_blob_index + 1)
+			img_hist = img.get_histogram()
+			img_stats = img_hist.get_statistics()
 
-	overall_ir =  ((healthy_leaves * healthy_mean) + (unhealthy_leaves * unhealthy_mean)) / (healthy_leaves + unhealthy_leaves)
+			healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
+			healthy_leaves, unhealthy_leaves = 0, 0
+			healthy_mean, unhealthy_mean = 0, 0
+			blob_found, leaf_blob_index = False, 0
 
-	send_data(leaf_count = (healthy_leaves, unhealthy_leaves), leaf_health = (healthy_mean, unhealthy_mean), plant_ndvi = 0, plant_ir = overall_ir, warning_str = "none")
+			for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([healthy_leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
+				blob_found = True
+				print("leaf blob found: " + str(leaf_blob.rect()))
+				img.draw_rectangle(leaf_blob.rect(), color = 255)
+				leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
+				leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
+				leaf_area = leaf_blob[2] * leaf_blob[3]
 
-	print("healthy mean = %i; unhealthy mean = %i" % (healthy_mean, unhealthy_mean))
-	if (unhealthy_mean < 135): print("You got some seriously unhealthy leafage there, figure it out")
-	elif (unhealthy_mean < 145): print("Some leaves are unhappy, although they're soldiering on")
-	else: print("Even your unhealthy leaves are healthy!")
+				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=50, area_threshold=50, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
+					print("bad blob found: " + str(bad_blob.rect()))
+					img.draw_rectangle(bad_blob.rect(), color = 127)
+					bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
+					bad_rect_pix_sum = bad_rect_stats.mean() * bad_blob[2] * bad_blob[3] # more undoing of mean function
+					leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
+					leaf_area = leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
 
-	sensor.flush()
+				print("healthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
+				healthy_leaves_mean_sum = healthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
+
+			# calculates the average value for the healthy leaves regardless of leaf size
+			if (blob_found == True):
+				healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
+
+			healthy_leaves = (leaf_blob_index + 1)
+			blob_found = False
+
+			for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([unhealthy_leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
+				blob_found = True
+				print("leaf blob found: " + str(leaf_blob.rect()))
+				img.draw_rectangle(leaf_blob.rect(), color = 255)
+				leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
+				leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
+				leaf_area = leaf_blob[2] * leaf_blob[3]
+				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
+					print("bad blob found: ", bad_blob.rect())
+					img.draw_rectangle(bad_blob.rect(), color = 127)
+					bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
+					bad_rect_pix_sum = bad_rect_stats.mean()*bad_blob[2]*bad_blob[3] # more undoing of mean function
+					leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
+					leaf_area = leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
+
+				print("unhealthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
+				unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
+
+			if (blob_found == True): # calculates the average value for the unhealthy leaves regardless of leaf size
+				unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
+				unhealthy_leaves = (leaf_blob_index + 1)
+
+			overall_ir =  ((healthy_leaves * healthy_mean) + (unhealthy_leaves * unhealthy_mean)) / (healthy_leaves + unhealthy_leaves)
+
+			# Send and save data
+			send_data(leaf_count = (healthy_leaves, unhealthy_leaves), leaf_health = (healthy_mean, unhealthy_mean), plant_ir = overall_ir, warning_str = warning)
+			new_data_tuple = (healthy_leaves, unhealthy_leaves, healthy_mean, unhealthy_mean, overall_ir)
+			for morsel in new_data_tuple:
+				data_str = data_str + str(morsel) + ","
+			data_str = data_str + warning + "\n" #(gain,r_gain,g_gain,b_gain,exposure_value,calibration_warning,"\n")
+
+			img_data_path = "data_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
+			img_data_fd = open(img_data_path, "w+")
+			if img_data_fd.write(data_str) < 1: warning = "insufficient data bytes written" # Write metadata to text file
+			img_data_fd.close() # Close file
+
+			print("healthy mean = %i; unhealthy mean = %i" % (healthy_mean, unhealthy_mean))
+
+			sensor.flush()
+		else:
+			print("No recognizable command, continuing to listen")

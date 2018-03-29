@@ -90,13 +90,9 @@ def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
 			count += 1
 
 		if (count < 310) | (cur_gain == 0):
-			print("Exposure Adjustment Complete.")
 			return l_mean
 		else:
-			print("Exposure Adjustment Incomplete.")
 			return -1
 
 	except Exception as e:
-		print(e)
-		print("Error occured!")
-		return -2
+		return -1

@@ -39,6 +39,13 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<5
 
 	return send_packed_msg(packed_msg = packed_next_msg_format)
 
+# This function just abstracts the sending of a command to make it more readable in the main
+def send_command(command_type = "none"):
+	success = send_next_msg_format(next_command)
+	if success == -1:
+		return -1
+	return 1
+
 # This function was designed to receive a format string and return the unpacked tuple.
 # To listen and wait for direction from the sender simply call listen_for_msg and specify a
 # long wait_time, without a format_str argument you should expect to receive back a two string
@@ -88,33 +95,4 @@ def receive_msg():
 	next_msg_format_bytes =  received_tuple[1]
 	next_msg_type_str = next_msg_type_bytes.decode("ascii")
 	next_msg_format_str = next_msg_format_bytes.decode("ascii")
-
-	if "calibration" in next_msg_type_str:
-		print("Calibration message incoming...")
-		calibration_tuple = listen_for_msg(format_str = next_msg_format_str) # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure, warning_bytes
-		calibration_list = list(calibration_tuple)
-		calibration_list[-1] = calibration_list[-1].decode('ascii').rstrip('\x00') # strip extra bytes from end of warning string, which is the last value in the list
-		#### CALL CALIBRATION FUNCTION ####
-		print("Calibration list: ", calibration_list)
-		#### CALL CALIBRATION FUNCTION ####
-		if "none" not in calibration_list[-1]: print("Calibration Warning: " + calibration_list[-1].decode('ascii')) # Check for warnings
-		return (next_msg_type_str)
-
-	elif "data" in next_msg_type_str:
-		print("Data message incoming...")
-		data_tuple = listen_for_msg(format_str = next_msg_format_str) # data tuple structure: leaf_count_h, leaf_count_u, leaf_health_h, leaf_health_u, plant_ndvi, plant_ir, warning_bytes
-		data_list = list(data_tuple)
-		data_list[-1] = data_list[-1].decode('ascii').rstrip('\x00') # strip extra bytes from end of warning string, which is the last value in the list
-		#### CALL DATA LOGGING FUNCTION ####
-		print("Data list: ", data_list)
-		#### CALL DATA LOGGING FUNCTION ####
-		if "none" not in data_list[-1]: print("Data Warning: " + data_list[-1].decode('ascii')) # Check for warnings
-		return (next_msg_type_str) # return the next_msg_format_str # should evaluate this, and if it's not "<s" you better be ready to send something else
-
-	elif "trigger" in next_msg_type_str:
-		#### CALL TRIGGER FUNCTION ####
-		return (next_msg_type_str)
-
-	else: # If we don't recognize the next_msg_type_str, print it and return it so the main can handle it
-		print("Unrecognized message type: " + next_msg_type_str + "\n" + "Received tuple: " +  str(listen_for_msg(format_str = next_msg_format_str)))
-		return (next_msg_type_str)
+	return (next_msg_type_str, next_msg_format_str)
