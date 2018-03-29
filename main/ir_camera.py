@@ -79,13 +79,14 @@ if __name__ == "__main__":
 
 		elif "trigger" in command:
 
-			data_str = ""
 			# is this the best way to get the plant_id?
 			(msg_type, next_msg_format_str) = i2c_slave.receive_msg()
 			if "plant_id" in msg_type: plant_id = i2c_slave.listen_for_msg(format_str = next_msg_format_str)[0]
 			else: 
 				plant_id = 0
 				warning = "did not receive plant_id"
+
+			data_str = ""
 
 			while toggle_flash() != 1: continue # ensures the flash turns on
 			utime.sleep_ms(25)
