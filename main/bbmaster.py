@@ -72,7 +72,7 @@ def save_img(raw_img, plant_id,img_number):
 ###############################################
 ## Sends calibration command to the camera
 def calibrate_camera():
-	cmd = (b'Calibrate',)
+	cmd = (b'calibrate',)
 	formatstr = '@%is' % len(cmd[0])
 
 	success = send_msg(formatstr,cmd)
@@ -91,7 +91,7 @@ def collect_data(plant_id):
 	while(1):
 		try:
 			## Send initialization trigger
-			cmd = (b'Go',)
+			cmd = (b'trigger',)
 			formatstr = '@%is' % len(cmd[0])
 			success = send_msg(formatstr,cmd)
 			
