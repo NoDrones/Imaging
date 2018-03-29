@@ -41,7 +41,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<5
 
 # This function just abstracts the sending of a command to make it more readable in the main
 def send_command(command_type = "none"):
-	success = send_next_msg_format(next_command)
+	success = send_next_msg_format(command_type)
 	if success == -1:
 		return -1
 	return 1

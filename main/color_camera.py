@@ -210,7 +210,7 @@ if __name__ == "__main__":
 			if (blob_found): a_mean = leaves_mean_a_sum / (leaf_count)
 
 			# Send and save data
-			new_data_tuple = (a_mean, lead_count)
+			new_data_tuple = (a_mean, leaf_count)
 			for morsel in new_data_tuple:
 				data_str = data_str + str(morsel) + ","
 			data_str = data_str + warning + "\n" #(gain,r_gain,g_gain,b_gain,exposure_value,calibration_warning,"\n")
