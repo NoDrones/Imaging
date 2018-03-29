@@ -26,6 +26,15 @@ def toggle_flash():
 	else:
 		return -1
 
+def send_plant_id(plant = 0)
+	format_str = "<i"
+	success = i2c_master.send_next_msg_format(next_msg_type_str = "plant_id", next_msg_format_str = format_str)
+	if success == False:
+		return -1
+	
+	packed_data = ustruct.pack(format_str, plant)
+	return i2c_master.send_packed_msg(packed_msg = packed_data)
+
 if __name__ == "__main__":
 
 	# \/ Setup Camera \/
@@ -121,14 +130,15 @@ if __name__ == "__main__":
 			# collect plant_id and image number from Beaglebone
 			msg = usb_comms.recv_msg()
 			plant_id = msg[0]
-			img_number = msg[1]
 
-			if calibrated != True: print("Not calibrated!!!")
+			if calibrated != True: warning = "not calibrated"
 
 			# \/ Take Photo \/
 
 			success = i2c_master.send_command(command_type = "trigger")
-			if success == -1: print("trigger command send failed")
+			if success == -1: warning = "trigger command send failed"
+
+			if send_plant_id(plant_id) == -1: warning = "plant_id failed to send"
 
 			while toggle_flash() != 1: pass # turn flash on
 			shutter_start = time.ticks()
