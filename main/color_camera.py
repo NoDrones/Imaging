@@ -70,7 +70,6 @@ if __name__ == "__main__":
 			# Analog gain introduces less noise than digital gain so we maximize it
 			sensor.__write_reg(0x4D, 0b11111111)
 			while toggle_flash() != 1: pass # turn flash on for calibration
-
 			sensor.set_auto_gain(False)
 			sensor.set_auto_whitebal(False)
 			sensor.set_auto_exposure(False)
@@ -116,7 +115,13 @@ if __name__ == "__main__":
 		############################################
 		### PHOTO & DATA COLLECTION TRIGGER
 		############################################
+
 		elif command == 'trigger':
+
+			# collect plant_id and image number from Beaglebone
+			msg = usb_comms.recv_msg()
+			plant_id = msg[0]
+			img_number = msg[1]
 
 			if calibrated != True: print("Not calibrated!!!")
 
@@ -140,12 +145,17 @@ if __name__ == "__main__":
 
 			img_id_str = str(next_img_number) + "_plant_" + str(plant_id)
 			raw_str = "raw_" + img_id_str
+			
 			raw_write = image.ImageWriter(raw_str)
 			raw_write.add_frame(img)
 			raw_write.close()
 
 			img.compress(quality = 100)
+
 			# Send image back to beaglebone
+			img.save("img_" + str(img_id))
+			#send the jpeg to Beaglebone
+			img_sent = usb_comms.send_img(img)
 
 			# reload raw
 			raw_read = image.ImageReader(raw_str)
@@ -159,6 +169,7 @@ if __name__ == "__main__":
 			img_metadata_fd.close() # Close file
 
 			# receive ir_data before continuing
+
 			(msg_type, next_msg_format_str) = i2c_master.receive_msg()
 			if msg_type == -1: warning = "i2c error"
 			elif "data" not in msg_type: warning = "error receiving data"
@@ -180,16 +191,17 @@ if __name__ == "__main__":
 
 			for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
 				blob_found = True
-				print("leaf blob found: ")
-				print(leaf_blob.rect())
+
 				img.draw_rectangle(leaf_blob.rect(), color = (0, 0, 100))
 				leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
 				# want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
 				leaf_rect_pix_a_sum = leaf_rect_stats.a_mean() * leaf_blob[2] * leaf_blob[3]
 				leaf_area = leaf_blob[2] * leaf_blob[3]
+
 				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
 					print("bad blob found: ")
 					print(bad_blob.rect())
+
 					img.draw_rectangle(bad_blob.rect(), color = (100, 0, 0))
 					bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
 					# more undoing of mean function
@@ -201,11 +213,12 @@ if __name__ == "__main__":
 
 				leaf_rect_a_mean = leaf_rect_stats.a_mean()
 				leaf_a_mean = leaf_rect_pix_a_sum / leaf_area
-				print("leaf a mean = %i [outer a mean = %i]" % (leaf_a_mean, leaf_rect_a_mean))
+
 				# the below function does not take into account the size of a leaf... each leaf is weighted equally
 				leaves_mean_a_sum = leaves_mean_a_sum + leaf_a_mean
 
 			# calculates the average value for the healthy leaves regardless of leaf size
+
 			leaf_count = leaf_blob_index + 1
 			if (blob_found): a_mean = leaves_mean_a_sum / (leaf_count)
 
@@ -221,6 +234,15 @@ if __name__ == "__main__":
 			img_data_fd = open(img_data_path, "w+")
 			if img_data_fd.write(data_str) < 1: warning = "insufficient data bytes written" # Write metadata to text file
 			img_data_fd.close() # Close file
+	
+			
+			##############SEND DATA TO BEAGLEBONE###############
+			data_to_send = (420,69)
+			data_sent = usb_comms.send_msg('@2i',data_to_send)
+			
+			##############SAVE DATA AND IMAGE TO SD CARD###############
+			##############SAVE DATA AND IMAGE TO SD CARD###############
+
 
 			sensor.flush()
 

@@ -29,6 +29,22 @@ def connect():
     # you must create a Cursor object. It will let
     #  you execute all the queries you need
 
+    
+def est_db_connection():
+	#Establish database connection
+	cnx = connect()
+	cur = cnx.cursor()
+	return (cnx,cur)
+
+(connection,cursor) = est_db_connection()
+
+#Establish FTP connection & navigate to image dump directory
+def est_ftp_connection():
+	ftp = ftplib.FTP(host='nuinstigator.com',user='greg@nuinstigator.com',passwd='safezoneaccess')
+	return ftp
+    
+ftp = est_ftp_connection()
+    
 def select(table, selection=None, pred=None):
     statement = "SELECT "
     if selection is not None:
@@ -41,43 +57,51 @@ def select(table, selection=None, pred=None):
     else:
         statement += pred
     return statement
+	
 
-def add_measurement(cursor, values):
+def add_measurement(values):
     statement = """INSERT INTO `measurements` (tstamp, location_no,
         insects_present, image, ndvi_val, ir_val, healthy_leaf_count,
         unhealthy_leaf_count) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
-    cursor.execute(statement, tuple(values))
+    cnx = connection
+    cur = cursor
+    while(1):
+        try:
+            cur.execute(statement, tuple(values))
+            break
+        except:
+            (cnx,cur) = est_db_connection()
+            continue
+    cnx.commit()
+    return 1
 	
-def update_locations(cursor,loc_no,image,tstamp):
-	statement = """UPDATE locations SET last_pic_saved = %s,ts_of_last_pic=%s WHERE location_no = %s"""
-	cursor.execute(statement,(image,tstamp,loc_no))
+def update_locations(loc_no,image,tstamp):
+    statement = """UPDATE locations SET last_pic_saved = %s,ts_of_last_pic=%s WHERE location_no = %s"""
+    cnx = connection
+    cur = cursor
+    while(1):
+        try:
+            cur.execute(statement,(image,tstamp,loc_no))
+            break
+        except:
+            (cnx,cur) = est_db_connection()
+            continue
 
-def est_connections():
-	#Establish database connection
-	cnx = connect()
-	cur = cnx.cursor()
-
-	#Establish FTP connection & navigate to image dump directory
-	ftp = ftplib.FTP(host='nuinstigator.com',user='greg@nuinstigator.com',passwd='safezoneaccess')
-	return (cnx,cur,ftp)
-
-def add_vals(cnx,cur):
-	tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))
-	location_no = 1
-	insects_present = True
-	image = 'testimg1.jpg'
-	ndvi_val = 420
-	ir_val = 69
-	hlc = 4
-	ulc = 2
-
-	vals = (tstamp,location_no,insects_present,image,ndvi_val,ir_val,hlc,ulc)
-	add_measurement(cur,vals)
-	update_locations(cur,location_no,image,tstamp)
+    cnx.commit()
+    return 1
 	
-	
-def add_img(filename,ftp):
-	f = open(filename,'rb')
+def add_img(filename,filepath):
+	f = open(filepath,'rb')
 	cmd = 'STOR %s' % filename
-	ftp.storbinary(cmd,f)
+	while(1):
+		try:
+			ftp.storbinary(cmd,f)
+			break
+		except:
+			ftp = est_ftp_connection()
+			continue
+			
 	f.close()
+	
+
+

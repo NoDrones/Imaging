@@ -67,11 +67,10 @@ def recv_msg():
 #Takes in an uncompressed img 		
 def send_img(img):
 	try:
-		jpg = img.compressed() # Creates jpg byte object
-		size = jpg.size()
+		size = img.size()
 		packed_size = ustruct.pack('@i', size)
 		port.write(packed_size)
-		port.send(jpg)  #using port.write() doesn't send the full object for some reason - must have some bytes limit
+		port.send(img)  #using port.write() doesn't send the full object for some reason - must have some bytes limit
 		return 1
 	except:
 		return -1
