@@ -26,7 +26,7 @@ def toggle_flash():
 	else:
 		return -1
 
-def send_plant_id(plant = 0)
+def send_plant_id(plant = 0):
 	format_str = "<i"
 	success = i2c_master.send_next_msg_format(next_msg_type_str = "plant_id", next_msg_format_str = format_str)
 	if success == False:
@@ -149,7 +149,8 @@ if __name__ == "__main__":
 			img.compress(quality = 100)
 
 			# Send image back to beaglebone
-			img.save("img_" + str(img_id))
+			#img.save("img_" + str(img_id))
+			img.save("img_" + img_id_str)
 			#send the jpeg to Beaglebone
 			img_sent = usb_comms.send_img(img)
 
@@ -170,10 +171,10 @@ if __name__ == "__main__":
 			if msg_type == -1: warning = "i2c error"
 			elif "data" not in msg_type: warning = "error receiving data"
 			else:
-				ir_data_tuple = listen_for_msg(format_str = next_msg_format_str) # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure, warning_bytes
+				ir_data_tuple = i2c_master.listen_for_msg(format_str = next_msg_format_str) # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure, warning_bytes
 				ir_data_list = list(ir_data_tuple)
 				# check warning bytes
-				ir_data_list[-1] = data_list[-1].decode('ascii').rstrip('\x00')
+				ir_data_list[-1] = ir_data_list[-1].decode('ascii').rstrip('\x00')
 				if 'none' not in ir_data_list[-1]:
 					warning = "ir data warning: " + ir_data_list[-1]
 

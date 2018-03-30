@@ -56,9 +56,14 @@ def recv_img():
 
 ############################################
 ## Saves image to disk and uploads to FTP server
-def save_img(raw_img, plant_id,img_number):
+def save_img(raw_img, plant_id,t):
+	
+	
+	file_tstamp = time.strftime('%m%d_%H-%M-%S', time.localtime(int(t)))
+	db_tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(t)))
+	
 	#Write the image to a file
-	filename = 'plant_%i_img_%i.jpg' % (plant_id,img_number)
+	filename = 'plant_%i_%s.jpg' % (plant_id,file_tstamp)
 	filepath = '/media/3472-745B/' + filename
 	imgfile = open(filepath,'w')
 	imgfile.write(raw_img)
@@ -66,6 +71,8 @@ def save_img(raw_img, plant_id,img_number):
 	
 	#Upload the image to the hosting site
 	dbConnect.add_img(filename,filepath)
+	#Update locations table
+	#dbConnect.update_locations(plant_id,filename,db_tstamp)
 	
 	return filename
 
@@ -88,38 +95,35 @@ def calibrate_camera():
 ## Takes in 2 ints with plant_id and image number
 def collect_data(plant_id):
 
-	while(1):
-		try:
-			## Send initialization trigger
-			cmd = (b'trigger',)
-			formatstr = '@%is' % len(cmd[0])
-			success = send_msg(formatstr,cmd)
-			
-			#Send image information
-			data = (plant_id)
-			success = send_msg('@i',data)
-			
-			if success==1:
-				raw_img = recv_img()
-				imgfile = save_img(raw_img,plant_id)
-				#print '%s saved & uploaded!' % imgfile
-				data = recv_msg()
-				
-				###########################
-				#ADD DATA TO DATABASE HERE
-				###########################
-				tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))
-				#Collect all of the below data from the data tuple:
-				#vals = (tstamp,location_no,insects_present,imgfile,ndvi_val,ir_val,hlc,ulc)
-				#dbConnect.add_measurement(vals)
-				#dbConnect.update_locations(location_no,imgfile,tstamp)
-				break
-				
-		except:
-			print 'Failed data collection. Trying again in 5s..'
-			time.sleep(5)
-			continue
-			
+
+	## Send initialization trigger
+	cmd = (b'trigger',)
+	formatstr = '@%is' % len(cmd[0])
+	success = send_msg(formatstr,cmd)
+	
+	#Send image information
+	data_to_send = (plant_id,)
+	success = send_msg('@i',data_to_send)
+	
+	if success==1:
+		raw_img = recv_img()
+		data = recv_msg()
+		t = time.time()
+		
+		
+		imgfile = save_img(raw_img,plant_id,t)
+		#print '%s saved & uploaded!' % imgfile
+
+		
+		###########################
+		#ADD DATA TO DATABASE HERE
+		###########################
+		tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))
+		#Collect all of the below data from the data tuple:
+		#vals = (tstamp,location_no,insects_present,imgfile,ndvi_val,ir_val,hlc,ulc)
+		#dbConnect.add_measurement(vals)
+		#dbConnect.update_locations(location_no,imgfile,tstamp)
+	
 	return (data,imgfile)
 			
 
