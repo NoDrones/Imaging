@@ -47,10 +47,10 @@ def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
 	print("Start set custom")
 	try:
 		sensor.set_auto_whitebal(True)
-		print("Setting WB...") #Need to do this while flash is on to keep colors true.
+		#print("Setting WB...") #Need to do this while flash is on to keep colors true.
 		utime.sleep_ms(1000)
 		sensor.set_auto_whitebal(False)
-		print("Starting Exposure Adjustment...")
+		#print("Starting Exposure Adjustment...")
 		b_gain = sensor.__read_reg(0x01)
 		r_gain = sensor.__read_reg(0x02)
 		g_gain = sensor.__read_reg(0x03)

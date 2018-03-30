@@ -74,7 +74,7 @@ if __name__ == "__main__":
 			# \/ Send Calibrate Command \/
 
 			success = i2c_master.send_command(command_type = "calibrate")
-			if success == -1: print("calibrate command send failed")
+			if success == -1: pass #print("calibrate command send failed")
 
 			# Analog gain introduces less noise than digital gain so we maximize it
 			sensor.__write_reg(0x4D, 0b11111111)
@@ -83,23 +83,9 @@ if __name__ == "__main__":
 			sensor.set_auto_whitebal(False)
 			sensor.set_auto_exposure(False)
 			if color_gain.set_custom_exposure() != -1: calibrated = True # Now set the exposure
-			else: print("Could not complete calibration")
+			else: pass #print("Could not complete calibration")
 
 			while toggle_flash() != 0: pass # turn flash off after calibration
-
-			# receive what we expect to be calibration values
-			(msg_type, msg_format) = i2c_master.receive_msg()
-			if msg_type == -1:
-				print("Could not receive message.")
-			elif "calibration_values" not in msg_type:
-				print("Unexpected msg_type: " + str(msg_type))
-			else:
-				ir_calibration_tuple = listen_for_msg(format_str = next_msg_format_str) # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure, warning_bytes
-				ir_calibration_list = list(ir_calibration_tuple)
-				# check warning bytes
-				ir_calibration_list[-1] = ir_calibration_list[-1].decode('ascii').rstrip('\x00')
-				if 'none' not in ir_calibration_list[-1]:
-					print("Calibration Warning Received: " + ir_calibration_list[-1])
 
 			# Fill metadata_str with calibration information
 			new_metadata_tuple = color_gain.get_gain()
@@ -209,8 +195,8 @@ if __name__ == "__main__":
 				leaf_area = leaf_blob[2] * leaf_blob[3]
 
 				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
-					print("bad blob found: ")
-					print(bad_blob.rect())
+					#print("bad blob found: ")
+					#print(bad_blob.rect())
 
 					img.draw_rectangle(bad_blob.rect(), color = (100, 0, 0))
 					bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))

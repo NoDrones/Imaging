@@ -12,14 +12,14 @@ def send_packed_msg(packed_msg):
 	for msg in msg_list:
 		attempts, success = 0, False
 		while success == False and attempts < 10:
-			print("Sending message. Attempt # %i" % attempts) # Attempt to send packed data with 5 second timeout
+			#print("Sending message. Attempt # %i" % attempts) # Attempt to send packed data with 5 second timeout
 			attempts = attempts + 1
 			try:
 				i2c_obj.send(msg, addr=0x12, timeout=5000)
-				print("Message sent...")
+				#print("Message sent...")
 				success = True
 			except OSError as err:
-				print("Error: " + str(err))
+				#print("Error: " + str(err))
 				pass # Don't care about errors - so pass. # Note that there are 3 possible errors. A timeout error, a general purpose error, or a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
 
 		if success == False: return -1
@@ -66,10 +66,10 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
 	while elapsed_time < (wait_time / 2) and success == False:
 		try:
 			i2c_obj.recv(i2c_data, addr=0x12, timeout = 5000)
-			print("Received data (stage %i)" % msg_stage)
+			#print("Received data (stage %i)" % msg_stage)
 			success = True
 		except OSError as err:
-			print("Error: " + str(err))
+			#print("Error: " + str(err))
 			elapsed_time = time.ticks() - t_start
 
 	if success == False: return -1

@@ -153,10 +153,17 @@ def mainloop():
 	#Reset?
 
 		
-#Set up PySerial connection	
-port = Serial(port='/dev/ttyACM0',baudrate=115200,timeout=5)
-if test_port()!=1:
-	port = Serial(port='/dev/ttyACM1',baudrate=115200,timeout=5)	
+try:#Set up PySerial connection	
+	port = Serial(port='/dev/ttyACM0',baudrate=115200,timeout=5)
+	test_port()
+except:
+	try:
+		port = Serial(port='/dev/ttyACM1',baudrate=115200,timeout=5)	
+		test_port()
+	except:
+		print 'Camera not connected.'
+		
+	
 	
 
 
