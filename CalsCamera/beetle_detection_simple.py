@@ -20,7 +20,7 @@ sensor.reset()
 sensor.set_contrast(1)
 sensor.set_gainceiling(16)
 # HQVGA and GRAYSCALE are the best for face tracking.
-sensor.set_framesize(sensor.HQVGA)
+sensor.set_framesize(sensor.QVGA)
 sensor.set_pixformat(sensor.GRAYSCALE)
 
 # Load Haar Cascade
@@ -32,7 +32,7 @@ beetle_cascade = image.HaarCascade("/classifier_iso_min_rotation_low_FA_12_stage
 clock = time.clock()
 
 while (True):
-	clock.tick()
+
 
 	# Capture snapshot
 	img = sensor.snapshot()
@@ -40,11 +40,13 @@ while (True):
 	# Find objects.
 	# Note: Lower scale factor scales-down the image more and detects smaller objects.
 	# Higher threshold results in a higher detection rate, with more false positives.
-	objects = img.find_features(beetle_cascade, threshold=1, scale_factor=1.2)
+	objects = img.find_features(beetle_cascade, threshold=1, scale_factor=1.5)
 
 	# Draw objects
 	for r in objects:
 		img.draw_rectangle(r)
+
+	time.sleep(500)
 
 	# Print FPS.
 	# Note: Actual FPS is higher, streaming the FB makes it slower.
