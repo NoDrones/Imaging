@@ -1,4 +1,4 @@
-import sensor, image, time, utime, pyb, ustruct, os, ir_gain, i2c_slave
+import sensor, image, time, utime, pyb, ustruct, os, ir_gain, i2c_slave, gc
 
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ir = 0, warning_str = "none"):
 
@@ -29,6 +29,7 @@ def toggle_flash(): # Call this function to toggle the flash state, it will retu
 if __name__ == "__main__":
 
 	# \/ Setup Camera \/
+	gc.enable()
 	sensor.reset()
 	sensor.set_pixformat(sensor.RGB565)
 	sensor.set_framesize(sensor.QVGA)
@@ -49,9 +50,13 @@ if __name__ == "__main__":
 	calibrated = False
 	metadata_str = ""
 
-	while(1): #Begin the loop that listens for Beaglebone commands
+	while(1): #Begin the loop that listens for Color Camera commands
 		# since we are expecting a command, we don't need to worry about the second value in tuple (next_msg_format_str)
-		command = i2c_slave.receive_msg()[0]
+		command_tuple = i2c_slave.receive_msg()
+		if "int" in str(type(command_tuple)):
+			command = "none"
+		else:
+			command = command_tuple[0]
 
 		if "calibrate" in command:
 			# Analog gain introduces less noise than digital gain so we maximize it
@@ -82,10 +87,10 @@ if __name__ == "__main__":
 			# is this the best way to get the plant_id?
 			(msg_type, next_msg_format_str) = i2c_slave.receive_msg()
 			if "plant_id" in msg_type: plant_id = i2c_slave.listen_for_msg(format_str = next_msg_format_str)[0]
-			else: 
+			else:
 				plant_id = 0
 				warning = "did not receive plant_id"
-
+			print("plant id = " + str(plant_id))
 			data_str = ""
 
 			while toggle_flash() != 1: continue # ensures the flash turns on
