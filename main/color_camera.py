@@ -1,4 +1,4 @@
-import sensor, image, time, utime, pyb, ustruct, os, color_gain, i2c_master,usb_comms
+import sensor, image, time, utime, pyb, ustruct, os, color_gain, i2c_master, usb_comms
 
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
 
@@ -31,7 +31,7 @@ def send_plant_id(plant = 0):
 	success = i2c_master.send_next_msg_format(next_msg_type_str = "plant_id", next_msg_format_str = format_str)
 	if success == False:
 		return -1
-	
+
 	packed_data = ustruct.pack(format_str, plant)
 	return i2c_master.send_packed_msg(packed_msg = packed_data)
 
@@ -57,6 +57,7 @@ if __name__ == "__main__":
 	# green is -a, yellow is +b, blue is -b, red is +a
 	leaf_thresholds = (25, 100, -127, -3, -15, 3)
 	bad_thresholds = (20, 100, -10, 127, 3, 127)
+	beetle_thresholds = (0, 100, 15, 127, -127, -5)
 	flash_time_ms = 250 # Set flash_time to be greater than exposure time
 	warning = "none"
 	calibrated = False
@@ -69,9 +70,7 @@ if __name__ == "__main__":
 		### CALIBRATION TRIGGER
 		#################################################################
 
-		if command == 'calibrate':
-
-			# \/ Send Calibrate Command \/
+		if "calibrate" in command:
 
 			success = i2c_master.send_command(command_type = "calibrate")
 			if success == -1: pass #print("calibrate command send failed")
@@ -98,7 +97,6 @@ if __name__ == "__main__":
 			for morsel in new_metadata_tuple:
 				metadata_str = metadata_str + str(morsel) + ","
 			metadata_str = metadata_str[:-1] + "\n" #(leaf_thresholds_l_lo,leaf_thresholds_l_hi,leaf_thresholds_a_lo,leaf_thresholds_a_hi,leaf_thresholds_b_lo,leaf_thresholds_b_hi,bad_threshold_l_lo,bad_threshold_l_hi,bad_threshold_a_lo,bad_threshold_a_hi,bad_threshold_b_lo,bad_threshold_b_hi)
-
 			calibrated = True
 
 			# TODO: Write color calibration data to sd card
@@ -111,7 +109,7 @@ if __name__ == "__main__":
 		### PHOTO & DATA COLLECTION TRIGGER
 		############################################
 
-		elif command == 'trigger':
+		elif "trigger" in command:
 
 			# collect plant_id and image number from Beaglebone
 			msg = usb_comms.recv_msg()
@@ -141,7 +139,7 @@ if __name__ == "__main__":
 
 			img_id_str = str(next_img_number) + "_plant_" + str(plant_id)
 			raw_str = "raw_" + img_id_str
-			
+
 			raw_write = image.ImageWriter(raw_str)
 			raw_write.add_frame(img)
 			raw_write.close()
@@ -156,8 +154,8 @@ if __name__ == "__main__":
 
 			# reload raw
 			raw_read = image.ImageReader(raw_str)
-            img = raw_read.next_frame(copy_to_fb = True, loop = False)
-            raw_read.close()
+			img = raw_read.next_frame(copy_to_fb = True, loop = False)
+			raw_read.close()
 
 			# save metadata file
 			img_metadata_path = "metadata_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
@@ -186,13 +184,15 @@ if __name__ == "__main__":
 			a_mean = 0
 			blob_found = False
 
+
 			
 			healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
 			healthy_leaves, unhealthy_leaves = 0, 0
 			healthy_mean, unhealthy_mean = 0, 0
 			blob_found, leaf_blob_index = False, 0
 			
-			
+			beetles = []
+
 			for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
 				blob_found = True
 
@@ -202,7 +202,22 @@ if __name__ == "__main__":
 				leaf_rect_pix_a_sum = leaf_rect_stats.a_mean() * leaf_blob[2] * leaf_blob[3]
 				leaf_area = leaf_blob[2] * leaf_blob[3]
 
-				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
+
+
+
+				#FIND BEETLES: WORK IN PROGR
+				try:
+					for beetle_blob_index, beetle_blob in enumerate(img.find_blobs(beetle_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0] - 10, leaf_blob[1] - 10, leaf_blob[2] + 20, leaf_blob[3] + 20))):
+						beetle_blob_stats = img_.get_statistics(roi = beetle_blob.rect(), threshold = beetle_thresholds)
+						if ((beetle_blob_stats.a_stdev() >= 2) & (beetle_blob_stats.b_stdev() >= 5) & (beetle_blob_stats.l_stdev() >= 5)): #bugs tend to have greater std deviations because they have a unique color against leaves and then also contain stripes.
+							beetles.append(beetle_blob)
+
+				except Exception as e:
+					print(e)
+
+
+
+				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=100, area_threshold=100, merge = False, roi = leaf_blob.rect())):
 					#print("bad blob found: ")
 					#print(bad_blob.rect())
 
@@ -221,10 +236,11 @@ if __name__ == "__main__":
 				# the below function does not take into account the size of a leaf... each leaf is weighted equally
 				leaves_mean_a_sum = leaves_mean_a_sum + leaf_a_mean
 
-			# calculates the average value for the healthy leaves regardless of leaf size
 
-			leaf_count = leaf_blob_index + 1
-			if (blob_found): a_mean = leaves_mean_a_sum / (leaf_count)
+			# calculates the average value for the healthy leaves regardless of leaf size
+			if blob_found:
+				leaf_count = leaf_blob_index + 1
+				a_mean = leaves_mean_a_sum / (leaf_count)
 
 			# Send and save data
 			new_data_tuple = (a_mean, leaf_count)
@@ -238,12 +254,12 @@ if __name__ == "__main__":
 			img_data_fd = open(img_data_path, "w+")
 			if img_data_fd.write(data_str) < 1: warning = "insufficient data bytes written" # Write metadata to text file
 			img_data_fd.close() # Close file
-	
-			
+
+
 			##############SEND DATA TO BEAGLEBONE###############
 			data_to_send = (420,69)
 			data_sent = usb_comms.send_msg('@2i',data_to_send)
-			
+
 			##############SAVE DATA AND IMAGE TO SD CARD###############
 			##############SAVE DATA AND IMAGE TO SD CARD###############
 
