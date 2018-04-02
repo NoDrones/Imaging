@@ -32,6 +32,14 @@ def recv_msg():
 	#Receive stage 1: Size of the message's format string
 	formatstr_size = struct.unpack('@i',port.read(4))[0]
 	print formatstr_size
+	
+	#Handles camera errors
+	if formatstr_size>1000:
+		print('Message receipt aborted: Camera error occurred')
+		errmsg = port.read(port.inWaiting())
+		port.flushInput()
+		return (errmsg,)
+		
 	#Receive stage 2: The message's format string
 	numstr = '@%is' % formatstr_size
 	formatstr = struct.unpack(numstr,port.read(formatstr_size))[0]
@@ -108,6 +116,7 @@ def collect_data(plant_id):
 	if success==1:
 		raw_img = recv_img()
 		data = recv_msg()
+		print data
 		t = time.time()
 		
 		
@@ -141,31 +150,23 @@ def test_port():
 	else:
 		return -1
 
-		
-##########################################
-## What will soon be the main loop: sends calibration command, moves motor, and collects data.
-def mainloop():
-	calibrate_camera()
-	time.sleep(2)
-	for i in range(1,5):
-		for j in range(1,10):
-			### Move motor to position i
-			(data,imgfile) = collect_data(j,i)
-			time.sleep(3)
-			
-	
-	#Reset?
-
-		
-try:#Set up PySerial connection	
-	port = Serial(port='/dev/ttyACM0',baudrate=115200,timeout=5)
-	test_port()
-except:
-	try:
-		port = Serial(port='/dev/ttyACM1',baudrate=115200,timeout=5)	
-		test_port()
+#Sets up Serial Connection
+def connect_to_camera():	
+	try:#Set up PySerial connection	
+		port = Serial(port='/dev/ttyACM0',baudrate=115200,timeout=5)
+		port.inWaiting()
+		return port
 	except:
-		print 'Camera not connected.'
+		try:
+			port = Serial(port='/dev/ttyACM1',baudrate=115200,timeout=5)	
+			port.inWaiting()
+			return port
+		except:
+			print 'Camera not connected.'
+		
+
+port = connect_to_camera()	
+
 		
 	
 	

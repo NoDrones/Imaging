@@ -186,6 +186,13 @@ if __name__ == "__main__":
 			a_mean = 0
 			blob_found = False
 
+			
+			healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
+			healthy_leaves, unhealthy_leaves = 0, 0
+			healthy_mean, unhealthy_mean = 0, 0
+			blob_found, leaf_blob_index = False, 0
+			
+			
 			for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
 				blob_found = True
 
