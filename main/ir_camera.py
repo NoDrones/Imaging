@@ -3,7 +3,7 @@ import sensor, image, time, utime, pyb, ustruct, os, ir_gain, i2c_slave, gc
 def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ir = 0, warning_str = "none"):
 
 	format_str = "<2i3f50s"
-	success = i2c_slave.send_next_msg_format(next_msg_type_str = "data")
+	success = i2c_slave.send_next_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
 	if success == False:
 		return -1
 
@@ -28,8 +28,9 @@ def toggle_flash(): # Call this function to toggle the flash state, it will retu
 
 if __name__ == "__main__":
 
-	# \/ Setup Camera \/
 	gc.enable()
+
+	# \/ Setup Camera \/
 	sensor.reset()
 	sensor.set_pixformat(sensor.RGB565)
 	sensor.set_framesize(sensor.QVGA)
@@ -50,7 +51,7 @@ if __name__ == "__main__":
 	calibrated = False
 	metadata_str = ""
 
-	while(1): #Begin the loop that listens for Color Camera commands
+	while(1): #Begin the loop that listens for Beaglebone commands
 		# since we are expecting a command, we don't need to worry about the second value in tuple (next_msg_format_str)
 		command_tuple = i2c_slave.receive_msg()
 		if "int" in str(type(command_tuple)):
@@ -66,7 +67,7 @@ if __name__ == "__main__":
 			sensor.set_auto_whitebal(False) # must be turned off for color tracking
 			sensor.set_auto_exposure(False)
 
-			if ir_gain.set_custom_exposure() == -1: warning = "set_custom_exposure error"
+			if ir_gain.set_custom_exposure(high_mean_thresh = 50, low_mean_thresh = 40) == -1: warning = "set_custom_exposure error"
 			while toggle_flash() != 0: pass # turn flash off after calibration
 
 			# Fill metadata_str with calibration information
@@ -83,14 +84,16 @@ if __name__ == "__main__":
 			calibrated = True
 
 		elif "trigger" in command:
-
-			# is this the best way to get the plant_id?
-			(msg_type, next_msg_format_str) = i2c_slave.receive_msg()
-			if "plant_id" in msg_type: plant_id = i2c_slave.listen_for_msg(format_str = next_msg_format_str)[0]
-			else:
+			try:
+				msg_type = i2c_slave.receive_msg()[0]
+				if "plant_id" in msg_type: plant_id = i2c_slave.listen_for_msg(format_str = "<i")[0]
+				else: 
+					plant_id = 0
+					warning = "did not receive plant_id"
+			except:
 				plant_id = 0
 				warning = "did not receive plant_id"
-			print("plant id = " + str(plant_id))
+
 			data_str = ""
 
 			while toggle_flash() != 1: continue # ensures the flash turns on
@@ -117,9 +120,6 @@ if __name__ == "__main__":
 			if img_metadata_fd.write(metadata_str) < 1: warning = "insufficient metadata bytes written" # Write metadata to text file
 			img_metadata_fd.close() # Close file
 
-			img_hist = img.get_histogram()
-			img_stats = img_hist.get_statistics()
-
 			healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
 			healthy_leaves, unhealthy_leaves = 0, 0
 			healthy_mean, unhealthy_mean = 0, 0
@@ -143,11 +143,8 @@ if __name__ == "__main__":
 
 				print("healthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
 				healthy_leaves_mean_sum = healthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
-
-			# calculates the average value for the healthy leaves regardless of leaf size
-			if (blob_found == True):
-				healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
-
+			
+			healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
 			healthy_leaves = (leaf_blob_index + 1)
 			blob_found = False
 
@@ -169,9 +166,8 @@ if __name__ == "__main__":
 				print("unhealthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
 				unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
 
-			if (blob_found == True): # calculates the average value for the unhealthy leaves regardless of leaf size
-				unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
-				unhealthy_leaves = (leaf_blob_index + 1)
+			unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
+			unhealthy_leaves = (leaf_blob_index + 1)
 
 			overall_ir =  ((healthy_leaves * healthy_mean) + (unhealthy_leaves * unhealthy_mean)) / (healthy_leaves + unhealthy_leaves)
 
@@ -180,7 +176,7 @@ if __name__ == "__main__":
 			new_data_tuple = (healthy_leaves, unhealthy_leaves, healthy_mean, unhealthy_mean, overall_ir)
 			for morsel in new_data_tuple:
 				data_str = data_str + str(morsel) + ","
-			data_str = data_str + warning + "\n" #(gain,r_gain,g_gain,b_gain,exposure_value,calibration_warning,"\n")
+			data_str = data_str + warning + "\n" #(healthy_leaves, unhealthy_leaves, healthy_mean, unhealthy_mean, overall_ir, warning"\n")
 
 			img_data_path = "data_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
 			img_data_fd = open(img_data_path, "w+")
@@ -190,5 +186,6 @@ if __name__ == "__main__":
 			print("healthy mean = %i; unhealthy mean = %i" % (healthy_mean, unhealthy_mean))
 
 			sensor.flush()
+
 		else:
 			print("No recognizable command, continuing to listen")

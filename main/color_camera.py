@@ -1,16 +1,4 @@
-import sensor, image, time, utime, pyb, ustruct, os, color_gain, i2c_master, usb_comms,gc
-
-def send_data(leaf_count = (0, 0), leaf_health = (0, 0), plant_ndvi = 0, plant_ir = 0, warning_str = "none"):
-
-    format_str = "<2i4f50s"
-    success = i2c_master.send_next_msg_format(next_msg_type_str = "data")
-    if success == False:
-        return -1
-
-    warning_bytes = warning_str.encode('ascii')
-    packed_data = ustruct.pack(format_str, leaf_count[0], leaf_count[1], leaf_health[0], leaf_health[1], plant_ndvi, plant_ir, warning_bytes)
-
-    return i2c_master.send_packed_msg(packed_msg = packed_data)
+import sensor, image, time, utime, pyb, ustruct, os, color_gain, i2c_master, usb_comms, gc
 
 #################
 # Call this function to toggle the flash state, it will return the new flash state.
@@ -28,6 +16,9 @@ def toggle_flash():
 
 def send_plant_id(plant = 0):
     format_str = "<i"
+    if "int" not in str(type(plant)):
+        return -1
+
     success = i2c_master.send_next_msg_format(next_msg_type_str = "plant_id", next_msg_format_str = format_str)
     if success == False:
         return -1
@@ -37,17 +28,15 @@ def send_plant_id(plant = 0):
 
 if __name__ == "__main__":
 
-    # \/ Setup Camera \/
-
-# \/ Setup Camera \/
     gc.enable()
+
+    # \/ Setup Camera \/
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
     sensor.set_framesize(sensor.QVGA)
     sensor.skip_frames(time = 2000)
     clock = time.clock()
     # If something that used to work isnt now try using 'VCP+MSC'
-    pyb.usb_mode('VCP+HID')
     utime.sleep_ms(1000)
     last_photo_id_path = "last_photo_id.txt"
     last_photo_id_fd = open(last_photo_id_path, "r+")
@@ -65,26 +54,32 @@ if __name__ == "__main__":
     metadata_str = ""
 
     while(1): #Begin the loop that listens for Beaglebone commands
-        command = usb_comms.listen_for_trigger()
+
+        command_received = usb_comms.listen_for_trigger()
+        if "int" in str(type(command_received)):
+            command = "timeout"
+        else: command = command_received
 
         #################################################################
         ### CALIBRATION TRIGGER
         #################################################################
 
         if "calibrate" in command:
-
-            success = i2c_master.send_command(command_type = "calibrate")
-            if success == -1: pass #print("calibrate command send failed")
+            if not i2c_master.send_command(command_type = "calibrate"): # if we can't send i2c message, don't calibrate
+                usb_comms.send_msg('@17s',(b'Calibration Error',))
+                continue # exit the "calibrate" section and listen for a command again
 
             # Analog gain introduces less noise than digital gain so we maximize it
             sensor.__write_reg(0x4D, 0b11111111)
             while toggle_flash() != 1: pass # turn flash on for calibration
-            utime.sleep_ms(25)
             sensor.set_auto_gain(False)
             sensor.set_auto_whitebal(False)
             sensor.set_auto_exposure(False)
-            if color_gain.set_custom_exposure() != -1: calibrated = True # Now set the exposure
-            else: pass #print("Could not complete calibration")
+            if color_gain.set_custom_exposure() != -1:
+                calibrated = True # Now set the exposure
+            else:
+                usb_comms.send_msg('@17s',(b'Calibration Error',))
+                continue
 
             while toggle_flash() != 0: pass # turn flash off after calibration
 
@@ -101,11 +96,7 @@ if __name__ == "__main__":
             metadata_str = metadata_str[:-1] + "\n" #(leaf_thresholds_l_lo,leaf_thresholds_l_hi,leaf_thresholds_a_lo,leaf_thresholds_a_hi,leaf_thresholds_b_lo,leaf_thresholds_b_hi,bad_threshold_l_lo,bad_threshold_l_hi,bad_threshold_a_lo,bad_threshold_a_hi,bad_threshold_b_lo,bad_threshold_b_hi)
             calibrated = True
 
-            # TODO: Write color calibration data to sd card
-
-            success = usb_comms.send_msg('@20s',(b'Calibration Complete',))
-            if success == 1:
-                continue
+            usb_comms.send_msg('@20s',(b'Calibration Complete',))
 
         ############################################
         ### PHOTO & DATA COLLECTION TRIGGER
@@ -114,17 +105,24 @@ if __name__ == "__main__":
         elif "trigger" in command:
 
             # collect plant_id and image number from Beaglebone
-            msg = usb_comms.recv_msg()
-            plant_id = msg[0]
+            try:
+                plant_id = usb_comms.recv_msg()[0]
+            except:
+                usb_comms.send_msg('@17s',(b'Plant ID Error',))
+                continue
 
-            if calibrated != True: warning = "not calibrated"
+            if not i2c_master.send_command(command_type = "trigger"):
+                usb_comms.send_msg('@17s',(b'Trigger Error',))
+                continue
+
+            if not send_plant_id(plant_id): # try to send plant_id to ir_camera
+                usb_comms.send_msg('@17s',(b'Plant ID Error',))
+                continue
+
+            if calibrated == False:
+                usb_comms.send_msg('@20s',(b'Not Calibrated',))
 
             # \/ Take Photo \/
-
-            success = i2c_master.send_command(command_type = "trigger")
-            if success == -1: warning = "trigger command send failed"
-
-            if send_plant_id(plant_id) == -1: warning = "plant_id failed to send"
 
             while toggle_flash() != 1: pass # turn flash on
             shutter_start = time.ticks()
@@ -146,20 +144,12 @@ if __name__ == "__main__":
             raw_write.add_frame(img)
             raw_write.close()
 
-            while toggle_flash() != 1: pass # turn flash on
-            shutter_start = time.ticks()
-            utime.sleep_ms(25)
-            img = sensor.snapshot() # take a picture
-            while time.ticks() < (shutter_start + flash_time_ms): pass
-            while toggle_flash() != 0: pass # turn flash off
+            img.compress(quality = 100)
 
-            img.compress(quality=50)
-
-            # Send image back to beaglebone
-            #img.save("img_" + str(img_id))
-            #img.save("img_" + img_id_str)
-            #send the jpeg to Beaglebone
-            img_sent = usb_comms.send_img(img)
+            #send the jpeg to Beaglebone, exit if send fails
+            while not usb_comms.send_img(img):
+                usb_comms.send_msg('@20s',(b'Image Not Sent',))
+                continue
 
             # reload raw
             raw_read = image.ImageReader(raw_str)
@@ -173,10 +163,15 @@ if __name__ == "__main__":
             img_metadata_fd.close() # Close file
 
             # receive ir_data before continuing
+            try:
+                (msg_type, next_msg_format_str) = i2c_master.receive_msg()
+            except:
+                usb_comms.send_msg('@20s',(b'I2C Error',))
+                continue
 
-            (msg_type, next_msg_format_str) = i2c_master.receive_msg()
-            if msg_type == -1: warning = "i2c error"
-            elif "data" not in msg_type: warning = "error receiving data"
+            if "data" not in msg_type:
+                usb_comms.send_msg('@20s',(b'Error Receiving IR Data',))
+                continue
             else:
                 ir_data_tuple = i2c_master.listen_for_msg(format_str = next_msg_format_str) # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure, warning_bytes
                 ir_data_list = list(ir_data_tuple)
@@ -185,22 +180,8 @@ if __name__ == "__main__":
                 if 'none' not in ir_data_list[-1]:
                     warning = "ir data warning: " + ir_data_list[-1]
 
-            # now perform measurements on your own image
-            img_hist = img.get_histogram()
-            img_stats = img_hist.get_statistics()
-
-            leaves_mean_a_sum = 0
-            a_mean = 0
-            blob_found = False
-
-
-
-            healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
-            healthy_leaves, unhealthy_leaves = 0, 0
-            healthy_mean, unhealthy_mean = 0, 0
-            blob_found, leaf_blob_index = False, 0
-            leaf_count = 0
-
+            leaves_mean_a_sum, a_mean, leaf_count = 0, 0, 0
+            blob_found, leaf_blob_index, bad_blob_index = False, 0, 0
             beetles = []
 
             for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
@@ -212,9 +193,6 @@ if __name__ == "__main__":
                 leaf_rect_pix_a_sum = leaf_rect_stats.a_mean() * leaf_blob[2] * leaf_blob[3]
                 leaf_area = leaf_blob[2] * leaf_blob[3]
 
-
-
-
                 #FIND BEETLES: WORK IN PROGR
                 try:
                     for beetle_blob_index, beetle_blob in enumerate(img.find_blobs(beetle_thresholds, pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0] - 10, leaf_blob[1] - 10, leaf_blob[2] + 20, leaf_blob[3] + 20))):
@@ -223,13 +201,9 @@ if __name__ == "__main__":
                             beetles.append(beetle_blob)
 
                 except Exception as e:
-                    print(e)
-
-
+                    pass
 
                 for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=100, area_threshold=100, merge = False, roi = leaf_blob.rect())):
-                    #print("bad blob found: ")
-                    #print(bad_blob.rect())
 
                     img.draw_rectangle(bad_blob.rect(), color = (100, 0, 0))
                     bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
@@ -246,37 +220,35 @@ if __name__ == "__main__":
                 # the below function does not take into account the size of a leaf... each leaf is weighted equally
                 leaves_mean_a_sum = leaves_mean_a_sum + leaf_a_mean
 
-
             # calculates the average value for the healthy leaves regardless of leaf size
             if blob_found:
                 leaf_count = leaf_blob_index + 1
                 a_mean = leaves_mean_a_sum / (leaf_count)
 
-            data_str = ''
             # Send and save data
+            data_str = ""
             new_data_tuple = (a_mean, leaf_count)
             for morsel in new_data_tuple:
                 data_str = data_str + str(morsel) + ","
-            data_str = data_str + warning + "\n" #(gain,r_gain,g_gain,b_gain,exposure_value,calibration_warning,"\n")
-
-            # Send data back to beaglebone (new_data_tuple, ir_data_list)
+            data_str = data_str + warning + "\n" #(a_mean, leaf_count, warning"\n")
 
             img_data_path = "data_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
             img_data_fd = open(img_data_path, "w+")
             if img_data_fd.write(data_str) < 1: warning = "insufficient data bytes written" # Write metadata to text file
             img_data_fd.close() # Close file
 
+            # ir_data_list is (healthy_leaves, unhealthy_leaves, healthy_mean, unhealthy_mean, overall_ir, warning)
+            # color data is (a_mean, leaf_count, warning)
+            data_list_to_send = ir_data_list+(list(new_data_tuple))
+            data_tuple_to_send = tuple(data_list_to_send)
 
-            ##############SEND DATA TO BEAGLEBONE###############
-            data_to_send = (420,69)
-            data_sent = usb_comms.send_msg('@2i',data_to_send)
-
-            ##############SAVE DATA AND IMAGE TO SD CARD###############
-            ##############SAVE DATA AND IMAGE TO SD CARD###############
-
+            # Send data to beaglebone
+            usb_comms.send_msg('@2i3f50sfi50s', data_tuple_to_send)
 
             sensor.flush()
 
+        elif "timeout" in command:
+            usb_comms.send_msg('@26s',(b'Listening Timeout',))
+
         else:
-            success = usb_comms.send_msg('@22s',(b'Command Not Recognized',))
-            continue
+            usb_comms.send_msg('@22s',(b'Command Not Recognized',))

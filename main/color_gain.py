@@ -44,7 +44,6 @@ def set_gain(gain_db):
 	return gain_reg_val
 
 def set_custom_exposure(high_l_mean_thresh = 17, low_l_mean_thresh = 16):
-	#print("Start set custom")
 	try:
 		sensor.set_auto_whitebal(True)
 		#print("Setting WB...") #Need to do this while flash is on to keep colors true.
