@@ -1,25 +1,23 @@
-import time, utime, pyb, ustruct
+import time, utime, pyb, ustruct, gc
 
+gc.enable()
 i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
 i2c_obj.deinit() # Fully reset I2C device...
 i2c_obj = pyb.I2C(2, pyb.I2C.SLAVE, addr=0x12)
 
 def send_packed_msg(packed_msg):
 
-	packed_next_msg_size = ustruct.pack("<i", len(packed_msg)) # alternative for size calcs incase this doesnt work `PyBytes_Size(packed_msg)`
+	packed_next_msg_size = ustruct.pack("<i", len(packed_msg))
 	msg_list = [packed_next_msg_size, packed_msg]
 
 	for msg in msg_list:
 		attempts, success = 0, False
 		while success == False and attempts < 10:
-			print("Sending message. Attempt # %i" % attempts) # Attempt to send packed data with 5 second timeout
 			attempts = attempts + 1
 			try:
 				i2c_obj.send(msg, timeout=5000)
-				print("Message sent...")
 				success = True
-			except OSError as err:
-				print("Error: " + str(err))
+			except:
 				pass # Don't care about errors - so pass. # Note that there are 3 possible errors. A timeout error, a general purpose error, or a busy error. The error codes are 116, 5, 16 respectively for "err.arg[0]".
 
 		if success == False: return -1
@@ -41,10 +39,7 @@ def send_next_msg_format(next_msg_type_str = "format", next_msg_format_str = "<5
 
 # This function just abstracts the sending of a command to make it more readable in the main
 def send_command(command_type = "none"):
-	success = send_next_msg_format(next_command)
-	if success == -1:
-		return -1
-	return 1
+	return send_next_msg_format(command_type)
 
 # This function was designed to receive a format string and return the unpacked tuple.
 # To listen and wait for direction from the sender simply call listen_for_msg and specify a
@@ -66,10 +61,8 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
 	while elapsed_time < (wait_time / 2) and success == False:
 		try:
 			i2c_obj.recv(i2c_data, timeout = 5000)
-			print("Received data (stage %i)" % msg_stage)
 			success = True
-		except OSError as err:
-			print("Error: " + str(err))
+		except:
 			elapsed_time = time.ticks() - t_start
 
 	if success == False: return -1

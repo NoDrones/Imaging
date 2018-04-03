@@ -1,5 +1,6 @@
 import image,time,pyb,ustruct
 
+pyb.usb_mode('VCP+HID')
 port = pyb.USB_VCP()
 port.setinterrupt(-1)
 
@@ -39,30 +40,32 @@ def recv_msg():
 
 	#Best way to read a line from the USB_VCP - simulates a "blocking" read like pySerial uses
 	def getln():
-		while(1):
+		t_start = time.ticks()
+		elapsed_time = 0
+		while elapsed_time < 20000: # 20 second timeout
 			if port.any():
 				msg = port.readline()
-				break
-		return msg #Returns raw bytes message	
+				return msg # Returns raw bytes message
+			elapsed_time = time.ticks() - t_start
+		return -1 # Returns failure
 		
-	#try:
-	stg1 = getln()
-	format_str_size = ustruct.unpack('@3s', stg1)[0] # Receive stage 1- the size of the format string
-	format_str_size = int(format_str_size.decode()) #Turns it back into an actual number
+	try:
+		stg1 = getln()
+		format_str_size = ustruct.unpack('@3s', stg1)[0] # Receive stage 1- the size of the format string
+		format_str_size = int(format_str_size.decode()) #Turns it back into an actual number
 
-	format_stringception = '@%is' % format_str_size # The format string of the data's format string = format_stringception
-	#Receive stage 2 - the format string
-	stg2 = getln()
-	format_str = ustruct.unpack(format_stringception, stg2)[0]
-	format_str = format_str.decode()
-	
-	#Receive stage 3 - the Data
-	stg3 = getln()
-	data = ustruct.unpack(format_str, stg3)
-			
-	return data	
-	#except:
-		#return -1
+		format_stringception = '@%is' % format_str_size # The format string of the data's format string = format_stringception
+		#Receive stage 2 - the format string
+		stg2 = getln()
+		format_str = ustruct.unpack(format_stringception, stg2)[0]
+		format_str = format_str.decode()
+		
+		#Receive stage 3 - the Data
+		stg3 = getln()
+		data = ustruct.unpack(format_str, stg3)
+				
+		return data	
+	except: return -1
 		
 #Takes in an uncompressed img 		
 def send_img(img):
@@ -81,8 +84,10 @@ def send_img(img):
 def listen_for_trigger():
 	while(1):
 		if port.isconnected(): # Listen for the command/trigger
-			command = recv_msg()[0].decode() # Looks for initialization command
-			return command
+			try:
+				command = recv_msg()[0].decode()
+				return command
+			except: return -1
 				
 				
 				

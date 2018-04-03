@@ -43,9 +43,8 @@ def set_gain(gain_db):
     sensor.__write_reg(0x00, gain_reg_val)
     return gain_reg_val
 
-def set_custom_exposure(high_mean_thresh = 17, low_mean_thresh = 16):
+def set_custom_exposure(high_mean_thresh = 50, low_mean_thresh = 40):
     try:
-        print("Starting Exposure Adjustment...")
         b_gain = sensor.__read_reg(0x01)
         r_gain = sensor.__read_reg(0x02)
         g_gain = sensor.__read_reg(0x03)
