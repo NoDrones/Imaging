@@ -171,7 +171,7 @@ sd = check_for_sd()
 web = dbConnect.check_for_internet()		
 #Sets up Serial Connection
 def connect_to_camera():
-	for i in range(1,5):
+	for i in range(0,10):
 		portname = '/dev/ttyACM%i' % i
 		try:
 			port=Serial(port=portname)
