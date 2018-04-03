@@ -1,6 +1,38 @@
-import struct,time,dbConnect
+import struct,time,requests
 from serial import Serial
 
+def check_for_internet():
+	url = 'http://google.com'
+	try:
+		requests.get(url)
+		print 'Internet connection established.'
+		return 1
+	except:
+		print 'WARNING: No Internet connection.'
+		return -1
+
+def check_for_sd():
+	try:
+		f = open('/media/3472-745B/README')
+		f.close()
+		print 'SD Card Connected'
+		return 1
+	except IOError:
+		print 'WARNING: SD Card Not Connected.'
+		return -1
+		
+##########################################
+### Sends a dummy tuple to test serial port.	
+def test_port():
+	cmd = (b'Testing',)
+	formatstr = '@%is' % len(cmd[0])
+	success = send_msg(formatstr,cmd)
+	if success==1:
+		data = recv_msg()
+		return 1
+	else:
+		return -1
+		
 #####################################################
 ## Beaglebone -> Camera Serial Communication
 def send_msg(formatstr,msg):
@@ -21,7 +53,6 @@ def send_msg(formatstr,msg):
 	port.write(stg3_msg)
 	
 	return 1
-	
 
 ########################################################
 ## Camera -> Beaglebone Serial Communication
@@ -31,7 +62,6 @@ def send_msg(formatstr,msg):
 def recv_msg():
 	#Receive stage 1: Size of the message's format string
 	formatstr_size = struct.unpack('@i',port.read(4))[0]
-	print formatstr_size
 	
 	#Handles camera errors
 	if formatstr_size>1000:
@@ -43,10 +73,8 @@ def recv_msg():
 	#Receive stage 2: The message's format string
 	numstr = '@%is' % formatstr_size
 	formatstr = struct.unpack(numstr,port.read(formatstr_size))[0]
-	print formatstr
 	#Receive stage 3: The data/message
 	datasize = struct.calcsize(formatstr)
-	print datasize
 	data = struct.unpack(formatstr,port.read(datasize))
 
 	if data:
@@ -97,7 +125,10 @@ def calibrate_camera():
 		return 1
 	else:
 		return -1
-			
+
+
+
+		
 ######################################################
 ## Sends command to camera to take pics & collect data
 ## Takes in 2 ints with plant_id and image number
@@ -137,35 +168,31 @@ def collect_data(plant_id):
 			
 
 
-##########################################
-### Sends a dummy tuple to test serial port.	
-def test_port():
-	cmd = (b'Testing',)
-	formatstr = '@%is' % len(cmd[0])
-	success = send_msg(formatstr,cmd)
-	if success==1:
-		data = recv_msg()
-		print data[0].decode()
-		return 1
-	else:
-		return -1
-
+sd = check_for_sd()
+web = check_for_internet()			
 #Sets up Serial Connection
-def connect_to_camera():	
-	try:#Set up PySerial connection	
-		port = Serial(port='/dev/ttyACM0',baudrate=115200,timeout=5)
+try:#Set up PySerial connection	
+	port = Serial(port='/dev/ttyACM0')
+	port.inWaiting()
+	if test_port()==1:
+		print 'Camera connected.'
+	else:
+		port = Serial(port='/dev/ttyACM1')
 		port.inWaiting()
-		return port
-	except:
-		try:
-			port = Serial(port='/dev/ttyACM1',baudrate=115200,timeout=5)	
-			port.inWaiting()
-			return port
-		except:
-			print 'Camera not connected.'
+		if test_port()==1:
+			print 'Camera connected.'
+except:
+	print 'Camera not connected.'
+	
+
+
+			
+
+
+			
+		
 		
 
-port = connect_to_camera()	
 
 		
 	
