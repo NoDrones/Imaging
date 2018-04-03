@@ -32,7 +32,7 @@ if __name__ == "__main__":
 
 	# \/ Setup Camera \/
 	sensor.reset()
-	sensor.set_pixformat(sensor.RGB565)
+	sensor.set_pixformat(sensor.GRAYSCALE)
 	sensor.set_framesize(sensor.QVGA)
 	sensor.skip_frames(time = 2000)
 	clock = time.clock()
@@ -67,7 +67,7 @@ if __name__ == "__main__":
 			sensor.set_auto_whitebal(False) # must be turned off for color tracking
 			sensor.set_auto_exposure(False)
 
-			if ir_gain.set_custom_exposure(high_mean_thresh = 50, low_mean_thresh = 40) == -1: warning = "set_custom_exposure error"
+			if ir_gain.set_custom_exposure() == -1: warning = "set_custom_exposure error"
 			while toggle_flash() != 0: pass # turn flash off after calibration
 
 			# Fill metadata_str with calibration information

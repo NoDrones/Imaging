@@ -1,5 +1,5 @@
 #Author: Calvin Ryan
-import sensor, math
+import sensor, math, utime
 
 
 def get_gain():
@@ -43,8 +43,12 @@ def set_gain(gain_db):
     sensor.__write_reg(0x00, gain_reg_val)
     return gain_reg_val
 
-def set_custom_exposure(high_mean_thresh = 50, low_mean_thresh = 40):
+def set_custom_exposure(high_mean_thresh = 100, low_mean_thresh = 90):
     try:
+        sensor.set_auto_whitebal(True)
+        utime.sleep_ms(500)
+        sensor.set_auto_whitebal(False)
+
         b_gain = sensor.__read_reg(0x01)
         r_gain = sensor.__read_reg(0x02)
         g_gain = sensor.__read_reg(0x03)
@@ -77,7 +81,7 @@ def set_custom_exposure(high_mean_thresh = 50, low_mean_thresh = 40):
                 new_gain = cur_gain + .1
             else:
                 break #we're in the range now!
-
+                
             set_gain(new_gain)
             cur_gain = new_gain
             count += 1
