@@ -1,15 +1,6 @@
-import struct,time,requests
+import struct,time,requests,dbConnect
 from serial import Serial
 
-def check_for_internet():
-	url = 'http://google.com'
-	try:
-		requests.get(url)
-		print 'Internet connection established.'
-		return 1
-	except:
-		print 'WARNING: No Internet connection.'
-		return -1
 
 def check_for_sd():
 	try:
@@ -36,23 +27,26 @@ def test_port():
 #####################################################
 ## Beaglebone -> Camera Serial Communication
 def send_msg(formatstr,msg):
-	#Stage 1: Send Length of message's format string
-	#But it has to send it as an ascii string (and not an int) because fuck you
-	formatstr_size = len(formatstr)
-	numstr = '%03d' % formatstr_size
-	stg1_msg = struct.pack('@3s',numstr)
-	port.write(stg1_msg)
+	try:
+		#Stage 1: Send Length of message's format string
+		#But it has to send it as an ascii string (and not an int) because fuck you
+		formatstr_size = len(formatstr)
+		numstr = '%03d' % formatstr_size
+		stg1_msg = struct.pack('@3s',numstr)
+		port.write(stg1_msg)
 
-	#Stage 2: Send The message's format string
-	stg2_formatstr = '@%is' % (formatstr_size)
-	stg2_msg = struct.pack(stg2_formatstr,formatstr)
-	port.write(stg2_msg)
+		#Stage 2: Send The message's format string
+		stg2_formatstr = '@%is' % (formatstr_size)
+		stg2_msg = struct.pack(stg2_formatstr,formatstr)
+		port.write(stg2_msg)
 
-	#Stage 3: Send The data
-	stg3_msg = struct.pack(formatstr,*msg)
-	port.write(stg3_msg)
+		#Stage 3: Send The data
+		stg3_msg = struct.pack(formatstr,*msg)
+		port.write(stg3_msg)
+		return 1
+	except:
+		return -1
 	
-	return 1
 
 ########################################################
 ## Camera -> Beaglebone Serial Communication
@@ -68,6 +62,7 @@ def recv_msg():
 		print('Message receipt aborted: Camera error occurred')
 		errmsg = port.read(port.inWaiting())
 		port.flushInput()
+		print errmsg
 		return (errmsg,)
 		
 	#Receive stage 2: The message's format string
@@ -94,27 +89,35 @@ def recv_img():
 ## Saves image to disk and uploads to FTP server
 def save_img(raw_img, plant_id,t):
 	
-	
 	file_tstamp = time.strftime('%m%d_%H-%M-%S', time.localtime(int(t)))
 	db_tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(t)))
 	
 	#Write the image to a file
-	filename = 'plant_%i_%s.jpg' % (plant_id,file_tstamp)
-	filepath = '/media/3472-745B/' + filename
-	imgfile = open(filepath,'w')
-	imgfile.write(raw_img)
-	imgfile.close()
-	
+	db_filename = 'plant_%i_%s.jpg' % (plant_id,file_tstamp)
+	if sd==1:
+		bb_filepath = '/media/3472-745B/' + db_filename
+	else:
+		bb_filepath = '/media/images/' + db_filename
+	try:	
+		imgfile = open(bb_filepath,'w')
+		imgfile.write(raw_img)
+		imgfile.close()
+	except:
+		print 'WARNING: Image not saved locally.'
+		
 	#Upload the image to the hosting site
-	dbConnect.add_img(filename,filepath)
-	#Update locations table
-	#dbConnect.update_locations(plant_id,filename,db_tstamp)
+	if web==1:
+		dbConnect.add_img(db_filename,bb_filepath)
+		dbConnect.update_locations(plant_id,db_filename,db_tstamp)
+	else:
+		print 'WARNING: Image not uploaded.'
 	
-	return filename
+	return db_filename
 
 ###############################################
 ## Sends calibration command to the camera
 def calibrate_camera():
+	port.flushInput()
 	cmd = (b'calibrate',)
 	formatstr = '@%is' % len(cmd[0])
 
@@ -125,16 +128,15 @@ def calibrate_camera():
 		return 1
 	else:
 		return -1
-
-
+		
+		
 
 		
 ######################################################
 ## Sends command to camera to take pics & collect data
 ## Takes in 2 ints with plant_id and image number
 def collect_data(plant_id):
-
-
+	port.flushInput()
 	## Send initialization trigger
 	cmd = (b'trigger',)
 	formatstr = '@%is' % len(cmd[0])
@@ -148,45 +150,43 @@ def collect_data(plant_id):
 		raw_img = recv_img()
 		data = recv_msg()
 		print data
+		
 		t = time.time()
+		db_filename = save_img(raw_img,plant_id,t)
 		
-		
-		imgfile = save_img(raw_img,plant_id,t)
-		#print '%s saved & uploaded!' % imgfile
-
-		
-		###########################
-		#ADD DATA TO DATABASE HERE
-		###########################
-		tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))
+		db_tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(t)))
+		#db_tuple = (db_tstamp,plant_id,data[0],db_filename,data[1],data[2],data[3],data[4])
 		#Collect all of the below data from the data tuple:
 		#vals = (tstamp,location_no,insects_present,imgfile,ndvi_val,ir_val,hlc,ulc)
 		#dbConnect.add_measurement(vals)
-		#dbConnect.update_locations(location_no,imgfile,tstamp)
 	
-	return (data,imgfile)
-			
+	return (data,db_filename)
 
+#Takes in the data returned from the camera
+#Returns a tuple ready to be added to the database
+def process_data(data_tuple):
+	pass
 
-sd = check_for_sd()
-web = check_for_internet()			
+sd = check_for_sd()	
+web = dbConnect.check_for_internet()		
 #Sets up Serial Connection
-try:#Set up PySerial connection	
-	port = Serial(port='/dev/ttyACM0')
-	port.inWaiting()
-	if test_port()==1:
-		print 'Camera connected.'
-	else:
-		port = Serial(port='/dev/ttyACM1')
-		port.inWaiting()
-		if test_port()==1:
-			print 'Camera connected.'
-except:
-	print 'Camera not connected.'
+def connect_to_camera():
+	for i in range(1,5):
+		portname = '/dev/ttyACM%i' % i
+		try:
+			port=Serial(port=portname)
+			port.inWaiting()
+			test_port()
+			port.flushInput()
+			return port
+		except:
+			continue
+	
+port=connect_to_camera()
 	
 
+	
 
-			
 
 
 			
