@@ -62,11 +62,11 @@ if __name__ == "__main__":
 		if "calibrate" in command:
 			# Analog gain introduces less noise than digital gain so we maximize it
 			sensor.__write_reg(0x4D, 0b11111111)
-			while toggle_flash() != 1: pass # turn flash on for calibration
 			sensor.set_auto_gain(False) # must be turned off for color tracking
 			sensor.set_auto_whitebal(False) # must be turned off for color tracking
 			sensor.set_auto_exposure(False)
-
+			while toggle_flash() != 1: pass # turn flash on for calibration
+			
 			if ir_gain.set_custom_exposure() == -1: warning = "set_custom_exposure error"
 			while toggle_flash() != 0: pass # turn flash off after calibration
 

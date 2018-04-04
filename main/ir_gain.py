@@ -43,7 +43,7 @@ def set_gain(gain_db):
     sensor.__write_reg(0x00, gain_reg_val)
     return gain_reg_val
 
-def set_custom_exposure(high_mean_thresh = 100, low_mean_thresh = 90):
+def set_custom_exposure(high_mean_thresh = 22, low_mean_thresh = 21):
     try:
         sensor.set_auto_whitebal(True)
         utime.sleep_ms(250)
@@ -81,7 +81,7 @@ def set_custom_exposure(high_mean_thresh = 100, low_mean_thresh = 90):
                 new_gain = cur_gain + .1
             else:
                 break #we're in the range now!
-                
+
             set_gain(new_gain)
             cur_gain = new_gain
             count += 1
