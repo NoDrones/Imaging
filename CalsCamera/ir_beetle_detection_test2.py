@@ -37,7 +37,7 @@ def send_plant_id(plant = 0):
 
 # \/ Setup Camera \/
 sensor.reset()
-sensor.set_pixformat(sensor.RGB565)
+sensor.set_pixformat(sensor.GRAYSCALE)
 sensor.set_framesize(sensor.QVGA)
 sensor.skip_frames(time = 2000)
 clock = time.clock()
@@ -76,17 +76,18 @@ print("Overall gain: " + str(post_adjust_overall_gain))
 print("exposure: " + str(post_adjust_exposure))
 print()
 
-'''
 
+'''
 sensor.set_auto_gain(False)
 sensor.set_auto_whitebal(False)
 sensor.set_auto_exposure(False)
-sensor.__write_reg(0x02, 16)
-sensor.__write_reg(0x03, 17)
-sensor.__write_reg(0x01, 17)
-sensor.__write_reg(0x00, 2)
+sensor.__write_reg(0x02, 8)
+sensor.__write_reg(0x03, 8)
+sensor.__write_reg(0x01, 8)
+sensor.__write_reg(0x00, 12)
 sensor.__write_reg(0x08, 1)
 sensor.__write_reg(0x10, 18)
+
 
 while toggle_flash() != 1: continue # ensures the flash turns on
 utime.sleep_ms(25)
@@ -100,102 +101,59 @@ raw_write = image.ImageWriter(raw_str)
 raw_write.add_frame(img)
 raw_write.close()
 
-healthy_leaves_mean_sum, unhealthy_leaves_mean_sum = 0, 0
-healthy_leaves, unhealthy_leaves = 0, 0
-healthy_mean, unhealthy_mean = 0, 0
-blob_found, leaf_blob_index = False, 0
 
-healthy_leaf_thresholds = (18, 100, -127, -3, 0, 127)
-unhealthy_leaf_thresholds = (18, 100, -127, -3, 0, 127)
-bad_thresholds = (0, 20, -10, 127, 3, 127)
-beetle_thresholds = (0, 100, 15, 127, -127, -5)
+leaf_count = 0
+leaf_area = 0
+leaf_mean = 0
+leaves_mean_sum = 0
+blob_found = False
 
-beetles = []
+leaf_blobs = []
+bad_blobs = []
+
+leaf_thresholds = [(45, 50), (50, 55), (55, 60), (60, 65), (70, 75), (80, 85), (85, 90), (90, 95), (95, 100), (100, 105), (105, 110), (110, 115), (115, 120), (120, 255)]
+#leaf_thresholds = [(45, 55), (65, 75), (75, 85), (85, 95), (95, 100), (100, 110), (110, 120), (120, 255)]
+bad_thresholds = [(0, 15), (15, 25), (25, 35), (35, 45)]
 
 ##################
-# HEALTHY LEAVES
+# FIND LEAVES
 ##################
 
-for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([healthy_leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
+for leaf_blob_index, leaf_blob in enumerate(img.find_blobs(leaf_thresholds, pixels_threshold=100, area_threshold=100, merge = False)):
 	blob_found = True
-	print("leaf blob found: " + str(leaf_blob.rect()))
-	img.draw_rectangle(leaf_blob.rect(), color = 255)
-	leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
+	leaf_blobs.append(leaf_blob)
+	leaf_rect_stats = img.get_statistics(roi = leaf_blob.rect())
 	leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
 	leaf_area = leaf_blob[2] * leaf_blob[3]
 
-	for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=50, area_threshold=50, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
-		print("bad blob found: " + str(bad_blob.rect()))
-		img.draw_rectangle(bad_blob.rect(), color = 127)
+	for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=25, area_threshold=25, merge = False, roi = leaf_blob.rect())):
+		bad_blobs.append(bad_blob)
 		bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
 		bad_rect_pix_sum = bad_rect_stats.mean() * bad_blob[2] * bad_blob[3] # more undoing of mean function
 		leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
 		leaf_area = leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
 
-	print("healthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
-	healthy_leaves_mean_sum = healthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
+	leaves_mean_sum = leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
 
-healthy_mean = healthy_leaves_mean_sum / (leaf_blob_index + 1)
-healthy_leaves = (leaf_blob_index + 1)
-blob_found = False
-
-##################
-# UNHEALTHY LEAVES
-##################
-
-for leaf_blob_index, leaf_blob in enumerate(img.find_blobs([unhealthy_leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
-	blob_found = True
-	print("leaf blob found: " + str(leaf_blob.rect()))
-	img.draw_rectangle(leaf_blob.rect(), color = 255)
-	leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
-	leaf_rect_pix_sum = leaf_rect_stats.mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
-	leaf_area = leaf_blob[2] * leaf_blob[3]
-	for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=100, area_threshold=100, merge = False, roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))):
-		print("bad blob found: ", bad_blob.rect())
-		img.draw_rectangle(bad_blob.rect(), color = 127)
-		bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
-		bad_rect_pix_sum = bad_rect_stats.mean()*bad_blob[2]*bad_blob[3] # more undoing of mean function
-		leaf_rect_pix_sum = leaf_rect_pix_sum - bad_rect_pix_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
-		leaf_area = leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
-
-	print("unhealthy leaf mean = %i [outer mean = %i]" % (leaf_rect_pix_sum / leaf_area, leaf_rect_stats.mean()))
-	unhealthy_leaves_mean_sum = unhealthy_leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
-
-unhealthy_mean = unhealthy_leaves_mean_sum / (leaf_blob_index + 1)
-unhealthy_leaves = (leaf_blob_index + 1)
-
-overall_ir =  ((healthy_leaves * healthy_mean) + (unhealthy_leaves * unhealthy_mean)) / (healthy_leaves + unhealthy_leaves)
+if blob_found:
+	leaf_count = (leaf_blob_index + 1)
+	leaf_mean = leaves_mean_sum / leaf_count
 
 
 
 
 
-#print("healthy leaf count: " + str(healthy_leaf_count))
-#print("unhealthy leaf count: " + str(unhealthy_leaf_count))
-#print("average healthy_leaf_a_mean: " + str(healthy_a_mean))
-#print("average unhealthy_leaf_a_mean: " + str(unhealthy_a_mean))
+
+print("leaf count: " + str(leaf_count))
+print("average leaf_mean: " + str(leaf_mean))
 
 
-for i in beetles:
-	print(i)
+for i in leaf_blobs:
+	img.draw_rectangle(i.rect(), color = (255))
 
+for i in bad_blobs:
+	img.draw_rectangle(i.rect(), color = (0))
 
-for i in beetles:
-	img.draw_rectangle(i.rect(), color = (0, 255, 255))
-
-'''
-for i in unhealthy_leaf_blobs:
-	img.draw_rectangle(i.rect(), color = (100, 100, 100))
-
-for i in healthy_leaf_blobs:
-	img.draw_rectangle(i.rect(), color = (0, 0, 100))
-
-for i in healthy_leaf_bad_blobs:
-	img.draw_rectangle(i.rect(), color = (100, 0, 0))
-
-for i in unhealthy_leaf_bad_blobs:
-	img.draw_rectangle(i.rect(), color = (100, 0, 0))
-'''
 
 sensor.flush()
 time.sleep(1000)
