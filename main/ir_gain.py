@@ -83,7 +83,7 @@ def set_custom_exposure(high_mean_thresh = 54, low_mean_thresh = 53):
 			cur_gain = new_gain
 			count += 1
 
-		if (count < 256) & (mean <= high_mean_thresh) & (mean >= low_mean_thresh): #if count is 256 then calibration was not succesfully completed
+		if (count < 256) & (mean <= high_l_mean_thresh) & (mean >= low_mean_thresh): #if count is 256 then calibration was not succesfully completed
 			return mean
 		else:
 			return -1

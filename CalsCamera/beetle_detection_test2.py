@@ -52,7 +52,7 @@ metadata_str = ""
 
 # Analog gain introduces less noise than digital gain so we maximize it
 sensor.__write_reg(0x4D, 0b11111111)
-'''
+
 sensor.set_auto_gain(False)
 sensor.set_auto_whitebal(False)
 sensor.set_auto_exposure(False)
@@ -90,7 +90,7 @@ sensor.__write_reg(0x01, 64)
 sensor.__write_reg(0x00, 6)
 sensor.__write_reg(0x08, 1)
 sensor.__write_reg(0x10, 18)
-
+'''
 calibrated = True
 
 # TODO: Write color calibration data to sd card
@@ -228,7 +228,6 @@ for healthy_leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_
 
 	#print("healthy_leaf_a_mean: " + str(healthy_leaf_a_mean))
 	#print("healthy_leaf_area: " + str(healthy_leaf_area))
-
 
 
 # calculates the average value for the healthy leaves regardless of leaf size
