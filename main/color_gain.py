@@ -46,7 +46,7 @@ def set_gain(gain_db):
 def set_custom_exposure(high_l_mean_thresh = 21, low_l_mean_thresh = 22):
 	try:
 		sensor.set_auto_whitebal(True)
-		utime.sleep_ms(500)
+		utime.sleep_ms(250)
 		sensor.set_auto_whitebal(False)
 
 		b_gain = sensor.__read_reg(0x01)

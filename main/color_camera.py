@@ -44,11 +44,6 @@ if __name__ == "__main__":
 	if len(img_number_str) == 0: img_number_str = "0" # If no number is read, start at 0
 	last_photo_id_fd.close() # Close file
 
-	# green is -a, yellow is +b, blue is -b, red is +a
-	healthy_leaf_thresholds = (14, 100, -40, -2, 5, 40)
-	bad_thresholds = (0, 13, -2, 40, 0, 10)
-	unhealthy_leaf_thresholds = (19, 100, 0, 40, 0, 40)
-	beetle_thresholds = (20, 100, 0, 30, 0, 30)
 	flash_time_ms = 250 # Set flash_time to be greater than exposure time
 	warning = "none"
 	calibrated = False
@@ -72,10 +67,10 @@ if __name__ == "__main__":
 
 			# Analog gain introduces less noise than digital gain so we maximize it
 			sensor.__write_reg(0x4D, 0b11111111)
-			while toggle_flash() != 1: pass # turn flash on for calibration
 			sensor.set_auto_gain(False)
 			sensor.set_auto_whitebal(False)
 			sensor.set_auto_exposure(False)
+			while toggle_flash() != 1: pass # turn flash on for calibration
 			if color_gain.set_custom_exposure() != -1:
 				calibrated = True # Now set the exposure
 			else:
@@ -151,12 +146,12 @@ if __name__ == "__main__":
 			while not usb_comms.send_img(img):
 				usb_comms.send_msg('@20s',(b'Image Not Sent',))
 				continue
-
+			
 			# reload raw
 			raw_read = image.ImageReader(raw_str)
 			img = raw_read.next_frame(copy_to_fb = True, loop = False)
 			raw_read.close()
-
+			
 			# save metadata file
 			img_metadata_path = "metadata_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
 			img_metadata_fd = open(img_metadata_path, "w+")
@@ -194,11 +189,18 @@ if __name__ == "__main__":
 			unhealthy_leaf_blobs = []
 			unhealthy_leaf_bad_blobs = []
 			healthy_leaf_count, unhealthy_leaf_count = 0, 0
+
+			# green is -a, yellow is +b, blue is -b, red is +a
+			healthy_leaf_thresholds = [(26, 100, -40, -10, 20, 40), (20, 26, -40, -10, 20, 40), (14, 20, -40, -10, 10, 40), (8, 14, -40, -2, 2, 40)]
+			bad_thresholds = [(0, 5, -2, 40, -10, 3), (5, 10, -2, 30, -10, 3), (10, 15, -2, 30, -10, 2)]
+			unhealthy_leaf_thresholds = [(19, 100, -3, 40, 0, 40)]
+			beetle_thresholds = [(19, 100, -3, 40, 0, 40)]
+
 			#######################
 			# UNHEALTHY LEAVES
 			#######################
 
-			for unhealthy_leaf_blob_index, leaf_blob in enumerate(img.find_blobs([unhealthy_leaf_thresholds], pixels_threshold=100, area_threshold=100, merge = False)):
+			for unhealthy_leaf_blob_index, leaf_blob in enumerate(img.find_blobs(unhealthy_leaf_thresholds, pixels_threshold=100, area_threshold=100, merge = False)):
 				unhealthy_blob_found = True
 				leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
 				unhealthy_leaf_rect_pix_a_sum = leaf_rect_stats.a_mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
@@ -208,8 +210,9 @@ if __name__ == "__main__":
 				if (abs(leaf_rect_stats.a_mean() - leaf_rect_stats.b_mean()) <= 10):
 					continue #this blob is probably black, white, or a shade of grey
 
-				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=25, area_threshold=25, merge = False, roi = leaf_blob.rect())):
+				for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=25, area_threshold=25, merge = False, roi = leaf_blob.rect())):
 					bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
+
 					bad_rect_pix_a_sum = bad_rect_stats.a_mean() * bad_blob[2] * bad_blob[3] # more undoing of mean function
 					unhealthy_leaf_rect_pix_a_sum = unhealthy_leaf_rect_pix_a_sum - bad_rect_pix_a_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
 					unhealthy_leaf_area = unhealthy_leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
@@ -219,21 +222,32 @@ if __name__ == "__main__":
 				unhealthy_leaf_a_mean = unhealthy_leaf_rect_pix_a_sum / unhealthy_leaf_area #this is the valid measurement
 				unhealthy_leaves_a_mean_sum = unhealthy_leaves_a_mean_sum + unhealthy_leaf_a_mean
 
-				try:
-					for beetle_blob_index, beetle_blob in enumerate(img.find_blobs([beetle_thresholds], roi = (leaf_blob[0] - 10, leaf_blob[1] - 10, leaf_blob[2] + 20, leaf_blob[3] + 20), pixels_threshold=100, area_threshold=100, merge = True, margin = 10)):
-						beetle_blob_stats = img.get_statistics(roi = beetle_blob.rect(), threshold = beetle_thresholds)
-						if ((beetle_blob_stats.a_stdev() >= 3) & (beetle_blob_stats.b_stdev() >= 3) & (beetle_blob_stats.l_max() - beetle_blob_stats.l_min() >= 50)): #bugs tend to have greater std deviations because they have a unique color against leaves and then also contain stripes.
-							beetles.append(beetle_blob)
-				except Exception as e:
-					pass
-					#ADD A SEARCH AGAIN WITH TIGHTER ROI BOUNDS!!!!!!!!!!!
+				#####################
+				# FIND BEETLES
+				#####################
 
+				try:
+					for beetle_blob_index, beetle_blob in enumerate(img.find_blobs(beetle_thresholds, roi = (leaf_blob[0] - 10, leaf_blob[1] - 10, leaf_blob[2] + 20, leaf_blob[3] + 20), pixels_threshold=100, area_threshold=100, merge = True, margin = 10)):
+						beetle_blob_stats = img.get_statistics(roi = beetle_blob.rect(), threshold = beetle_thresholds)
+						if ((beetle_blob_stats.a_stdev() >= 3) & (beetle_blob_stats.b_stdev() >= 3) & (beetle_blob_stats.l_max() - beetle_blob_stats.l_min() >= 33)): #bugs tend to have greater std deviations because they have a unique color against leaves and then also contain stripes.
+							beetles.append(beetle_blob)
+				except Exception as e: #search with tighter bounds
+					try:
+						for beetle_blob_index, beetle_blob in enumerate(img.find_blobs(beetle_thresholds, roi = leaf_blob.rect(), pixels_threshold=100, area_threshold=100, merge = True, margin = 10)):
+							beetle_blob_stats = img.get_statistics(roi = beetle_blob.rect(), threshold = beetle_thresholds)
+							if ((beetle_blob_stats.a_stdev() >= 3) & (beetle_blob_stats.b_stdev() >= 3) & (beetle_blob_stats.l_max() - beetle_blob_stats.l_min() >= 33)): #bugs tend to have greater std deviations because they have a unique color against leaves and then also contain stripes.
+								beetles.append(beetle_blob)
+					except Exception as e:
+						pass
+						#okay fine, the error is something else.
+
+			beetle_count = len(beetles)		
 
 			#######################
 			# HEALTHY LEAVES
 			#######################
 
-			for healthy_leaf_blob_index, leaf_blob in enumerate(img.find_blobs([healthy_leaf_thresholds], pixels_threshold=200, area_threshold=200, merge = False)):
+			for healthy_leaf_blob_index, leaf_blob in enumerate(img.find_blobs(healthy_leaf_thresholds, pixels_threshold=200, area_threshold=200, merge = False)):
 				healthy_blob_found = True
 				leaf_rect_stats = img.get_statistics(roi = (leaf_blob[0], leaf_blob[1], leaf_blob[2], leaf_blob[3]))
 				healthy_leaf_rect_pix_a_sum = leaf_rect_stats.a_mean() * leaf_blob[2] * leaf_blob[3] # want to undo the mean function so we can adjust the leaf mean to remove the effect of bad blobs
@@ -243,8 +257,9 @@ if __name__ == "__main__":
 				if (abs(leaf_rect_stats.a_mean() - leaf_rect_stats.b_mean()) <= 10):
 					continue #this blob is probably black, white, or a shade of grey
 
-				for bad_blob_index, bad_blob in enumerate(img.find_blobs([bad_thresholds], pixels_threshold=25, area_threshold=25, merge = False, roi = leaf_blob.rect())):
+				for bad_blob_index, bad_blob in enumerate(img.find_blobs(bad_thresholds, pixels_threshold=25, area_threshold=25, merge = False, roi = leaf_blob.rect())):
 					bad_rect_stats = img.get_statistics(roi = (bad_blob[0], bad_blob[1], bad_blob[2], bad_blob[3]))
+
 					bad_rect_pix_a_sum = bad_rect_stats.a_mean() * bad_blob[2] * bad_blob[3] # more undoing of mean function
 					healthy_leaf_rect_pix_a_sum = healthy_leaf_rect_pix_a_sum - bad_rect_pix_a_sum # tracking the sum of pixels that are in the leaf_rect, but are not in any bad_rects
 					healthy_leaf_area = healthy_leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
@@ -254,41 +269,35 @@ if __name__ == "__main__":
 				healthy_leaf_a_mean = healthy_leaf_rect_pix_a_sum / healthy_leaf_area #this is the valid measurement
 				healthy_leaves_a_mean_sum = healthy_leaves_a_mean_sum + healthy_leaf_a_mean
 
-				try:
-					for beetle_blob_index, beetle_blob in enumerate(img.find_blobs([beetle_thresholds], roi = (leaf_blob[0] - 10, leaf_blob[1] - 10, leaf_blob[2] + 20, leaf_blob[3] + 20), pixels_threshold=100, area_threshold=100, merge = True, margin = 10)):
-						beetle_blob_stats = img.get_statistics(roi = beetle_blob.rect(), threshold = beetle_thresholds)
-						if ((beetle_blob_stats.a_stdev() >= 3) & (beetle_blob_stats.b_stdev() >= 3) & (beetle_blob_stats.l_max() - beetle_blob_stats.l_min() >= 50)): #bugs tend to have greater std deviations because they have a unique color against leaves and then also contain stripes.
-							beetles.append(beetle_blob)
-							pass
-				except Exception as e:
-					pass
-					#ADD A SEARCH AGAIN WITH TIGHTER ROI BOUNDS!!!!!!!!!!!
+
+			''' UNCOMMENT THIS IF YOU WANT THE BB TO RECEIVE A PIC WITH BOUNDING BOXES. 
+			for i in beetles:
+				img.draw_rectangle(i.rect(), color = (0, 255, 255))
+			
+			for i in unhealthy_leaf_blobs:
+				img.draw_rectangle(i.rect(), color = (100, 100, 100))
+
+			for i in healthy_leaf_blobs:
+				img.draw_rectangle(i.rect(), color = (0, 0, 100))
+
+			for i in healthy_leaf_bad_blobs:
+				img.draw_rectangle(i.rect(), color = (100, 0, 0))
+
+			for i in unhealthy_leaf_bad_blobs:
+				img.draw_rectangle(i.rect(), color = (100, 0, 0))
 
 
-			# calculates the average value for the healthy leaves regardless of leaf size
-			if healthy_blob_found:
-				healthy_leaf_count = healthy_leaf_blob_index + 1
-				healthy_a_mean = healthy_leaves_a_mean_sum / (healthy_leaf_count)
+			img.compress(quality = 99)
 
-			if unhealthy_blob_found:
-				unhealthy_leaf_count = unhealthy_leaf_blob_index + 1
-				unhealthy_a_mean = unhealthy_leaves_a_mean_sum / unhealthy_leaf_count
-
-			beetle_count = len(beetles)			
-				
-			################################
-			###### RETURN THESE VARIABLES TO HOST!!!!!!
-			################################
-
-			#beetle_count
-			#healthy_leaf_count
-			#unhealthy_leaf_count
-			#healthy_a_mean
-			#unhealthy_a_mean
+			#send the jpeg to Beaglebone, exit if send fails
+			while not usb_comms.send_img(img):
+				usb_comms.send_msg('@20s',(b'Image Not Sent',))
+				continue
+			'''
 
 			# Send and save data
 			data_str = ""
-			new_data_tuple = (healthy_leaf_count, unhealthy_leaf_count, healthy_a_mean, unhealthy_a_mean, beetle_count)
+			new_data_tuple = (healthy_leaf_count, unhealthy_leaf_count, healthy_a_mean, unhealthy_a_mean, beetle_count) #return data to bb
 			for morsel in new_data_tuple:
 				data_str = data_str + str(morsel) + ","
 			data_str = data_str + warning + "\n" #(a_mean, leaf_count, warning"\n")
@@ -305,6 +314,8 @@ if __name__ == "__main__":
 
 			# Send data to beaglebone
 			usb_comms.send_msg('@2i3f50s2i2fi50s', data_tuple_to_send)
+
+
 
 			sensor.flush()
 
