@@ -68,7 +68,7 @@ if __name__ == "__main__":
 		#################################################################
 
 		if "calibrate" in command:
-			if not i2c_master.send_command(command_type = "calibrate"): # if we can't send i2c message, don't calibrate
+			if i2c_master.send_command(command_type = "calibrate") == -1: # if we can't send i2c message, don't calibrate
 				usb_comms.send_msg('@17s',(b'Calibration Error',))
 				continue # exit the "calibrate" section and listen for a command again
 
@@ -124,7 +124,6 @@ if __name__ == "__main__":
 		############################################
 
 		elif "trigger" in command:
-
 			
 			# collect plant_id and image number from Beaglebone
 			try:
@@ -134,12 +133,11 @@ if __name__ == "__main__":
 				continue
 
 
-			
-			if not i2c_master.send_command(command_type = "trigger"):
+			if i2c_master.send_command(command_type = "trigger") == -1:
 				#usb_comms.send_msg('@17s',(b'Trigger Error',))
 				continue
 
-			if not send_plant_id(plant_id): # try to send plant_id to ir_camera
+			if send_plant_id(plant_id) == -1: # try to send plant_id to ir_camera
 				#usb_comms.send_msg('@17s',(b'Plant ID Error',))
 				continue
 
@@ -173,7 +171,7 @@ if __name__ == "__main__":
 			img.compress(quality = 99)
 
 			#send the jpeg to Beaglebone, exit if send fails
-			while not usb_comms.send_img(img):
+			if usb_comms.send_img(img) == -1:
 				usb_comms.send_msg('@14s',(b'Image Not Sent',))
 				continue
 
@@ -193,7 +191,7 @@ if __name__ == "__main__":
 				(msg_type, next_msg_format_str) = i2c_master.receive_msg()
 				usb_comms.send_msg('@16s',(b'IR Data Received',))
 			except:
-				if not i2c_master.reinitialize():
+				if i2c_master.reinitialize() == -1:
 					usb_comms.send_msg('@9s',(b'I2C Error',))
 				usb_comms.send_msg('@17s',(b'I2C Reinitialized',))
 				continue
@@ -327,13 +325,6 @@ if __name__ == "__main__":
 			for i in unhealthy_leaf_bad_blobs:
 				img.draw_rectangle(i.rect(), color = (100, 0, 0))
 
-
-			img.compress(quality = 99)
-
-			#send the jpeg to Beaglebone, exit if send fails
-			while not usb_comms.send_img(img):
-				usb_comms.send_msg('@20s',(b'Image Not Sent',))
-				continue
 			'''
 
 			# Send and save data

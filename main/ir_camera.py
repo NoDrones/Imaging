@@ -167,10 +167,10 @@ if __name__ == "__main__":
 				leaf_mean = leaves_mean_sum / leaf_count
 
 			# Send and save data
-			if not send_data(leaf_count = leaf_count, leaf_mean = leaf_mean, warning_str = warning):
+			if send_data(leaf_count = leaf_count, leaf_mean = leaf_mean, warning_str = warning) == -1:
 				i2c_slave.reinitialize()
 				warning = "data send error"
-				
+
 			new_data_tuple = (leaf_count, leaf_mean)
 			for morsel in new_data_tuple:
 				data_str = data_str + str(morsel) + ","

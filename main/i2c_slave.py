@@ -13,7 +13,7 @@ def reinitialize():
 		return 1
 	except:
 		return -1
-		
+
 def send_packed_msg(packed_msg):
 
 	packed_next_msg_size = ustruct.pack("<i", len(packed_msg))
@@ -81,8 +81,11 @@ def listen_for_msg(format_str = "<50s50s", msg_size_bytes = 4, msg_stage = 1, wa
 		packed_msg = listen_for_msg(msg_size_bytes = int(next_msg_size_bytes), msg_stage = 2)
 		if packed_msg == -1: # If an error occured in stage 2, exit stage 1
 			return -1
-		return ustruct.unpack(format_str, packed_msg)
-
+		try:
+			return ustruct.unpack(format_str, packed_msg)
+		except:
+			return -1
+			
 	if msg_stage == 2: return i2c_data
 
 # This function is responsible for receiving messages and carrying out commands
