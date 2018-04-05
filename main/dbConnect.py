@@ -18,6 +18,11 @@ database="nuinstig_goats"
 charset = "utf8mb4"
 cursorType = pymysql.cursors.DictCursor
 
+def shutdown():
+	connection.close()
+	ftp.quit()
+
+
 def check_for_internet():
 	url = 'http://google.com'
 	try:
@@ -70,15 +75,21 @@ def select(table, selection=None, pred=None):
 		statement += pred
 	return statement
 	
+#Takes in a processed tuple
 def add_measurement(values):
+
+	#Values tuple should look like below:
+	#(tstamp,location_no,insects_present,image,ir_val,healthy_leaf_count,unhealthy_leaf_count,color_healthy_mean,color_unhealthy_mean,ir_leaf_count,warning)
+	
 	statement = """INSERT INTO `measurements` (tstamp, location_no,
-		insects_present, image, ndvi_val, ir_val, healthy_leaf_count,
-		unhealthy_leaf_count) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
+		insects_present, image,ir_val,healthy_leaf_count,
+		unhealthy_leaf_count,color_healthy_mean,color_unhealthy_mean,
+		ir_leaf_count,warning) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 	cnx = connection
 	cur = cursor
 	while(1):
 		try:
-			cur.execute(statement, tuple(values))
+			cur.execute(statement, values)
 			cnx.commit()
 			break
 		except pymysql.err.OperationalError:

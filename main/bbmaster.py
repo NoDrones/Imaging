@@ -1,7 +1,10 @@
+#!usr/bin/env python
+
 import struct,time,requests,dbConnect
 from serial import Serial
 
-
+###############################################
+## Checks if the Beaglebone's SD card is recognized.
 def check_for_sd():
 	try:
 		f = open('/media/3472-745B/README')
@@ -23,7 +26,7 @@ def test_port():
 		return 1
 	else:
 		return -1
-		
+
 #####################################################
 ## Beaglebone -> Camera Serial Communication
 def send_msg(formatstr,msg):
@@ -47,7 +50,6 @@ def send_msg(formatstr,msg):
 	except:
 		return -1
 	
-
 ########################################################
 ## Camera -> Beaglebone Serial Communication
 ## Note: On the Beaglebone (in pyserial), the read() function is blocking
@@ -92,7 +94,6 @@ def save_img(raw_img, plant_id,t):
 	file_tstamp = time.strftime('%m%d_%H-%M-%S', time.localtime(int(t)))
 	db_tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(t)))
 	
-	#Write the image to a file
 	db_filename = 'plant_%i_%s.jpg' % (plant_id,file_tstamp)
 	if sd==1:
 		bb_filepath = '/media/3472-745B/' + db_filename
@@ -102,16 +103,16 @@ def save_img(raw_img, plant_id,t):
 		imgfile = open(bb_filepath,'w')
 		imgfile.write(raw_img)
 		imgfile.close()
+		#Upload the image to the hosting site
+		if web==1:
+			dbConnect.add_img(db_filename,bb_filepath)
+			dbConnect.update_locations(plant_id,db_filename,db_tstamp)
+		else:
+			print 'WARNING: Image not uploaded.'
+		
 	except:
 		print 'WARNING: Image not saved locally.'
 		
-	#Upload the image to the hosting site
-	if web==1:
-		dbConnect.add_img(db_filename,bb_filepath)
-		dbConnect.update_locations(plant_id,db_filename,db_tstamp)
-	else:
-		print 'WARNING: Image not uploaded.'
-	
 	return db_filename
 
 ###############################################
@@ -122,19 +123,17 @@ def calibrate_camera():
 	formatstr = '@%is' % len(cmd[0])
 
 	success = send_msg(formatstr,cmd)
+	
 	if success==1:
 		data = recv_msg()
 		print data[0].decode()
 		return 1
 	else:
 		return -1
-		
-		
-
-		
+				
 ######################################################
 ## Sends command to camera to take pics & collect data
-## Takes in 2 ints with plant_id and image number
+## Takes in an int with plant_id
 def collect_data(plant_id):
 	port.flushInput()
 	## Send initialization trigger
@@ -148,49 +147,130 @@ def collect_data(plant_id):
 	
 	if success==1:
 		raw_img = recv_img()
-		data = recv_msg()
-		print data
-		
-		t = time.time()
-		db_filename = save_img(raw_img,plant_id,t)
-		
-		db_tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(t)))
-		#db_tuple = (db_tstamp,plant_id,data[0],db_filename,data[1],data[2],data[3],data[4])
-		#Collect all of the below data from the data tuple:
-		#vals = (tstamp,location_no,insects_present,imgfile,ndvi_val,ir_val,hlc,ulc)
-		#dbConnect.add_measurement(vals)
-	
-	return (data,db_filename)
+		if 'IR Data Received' in recv_msg():
+			data = recv_msg()
+			t = time.time()
+			db_filename = save_img(raw_img,plant_id,t) #Add image to database & update plant_id's most recent img
+			db_tuple = process_data(data,t,db_filename,plant_id) #Process received data tuple
+			dbConnect.add_measurement(db_tuple) #Add measurements to database
 
+	return (data,db_filename)
+	
+#############################################################
 #Takes in the data returned from the camera
 #Returns a tuple ready to be added to the database
-def process_data(data_tuple):
-	pass
+def process_data(data_tuple,t,db_imgfile,plant_id):
 
-sd = check_for_sd()	
-web = dbConnect.check_for_internet()		
+	
+	#Returned tuple is in the following format:
+	#(0)IR_leaves,(1) IR_mean,(2)ir_warning str
+	#(3) healthy_leaf_count, (4) unhealthy_leaf_count, (5) healthy_a_mean, (6) unhealthy_a_mean, (7) beetle_count, (8) color warning
+	#2 integers,3 floats,string,2 integers,2 floats,1 integer string
+	
+	#Database tuple should be as follows:
+	#(tstamp,location_no,insects_present,image,ir_val,healthy_leaf_count,unhealthy_leaf_count,color_healthy_mean,color_unhealthy_mean,ir_leaf_count,warning)
+	db_tstamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(t)))
+	insects_present = data_tuple[7]
+	ir_val = data_tuple[1]
+	healthy_leaf_count = data_tuple[3]
+	unhealthy_leaf_count = data_tuple[4]
+	color_healthy_mean = data_tuple[5]
+	color_unhealthy_mean = data_tuple[6]
+	ir_leaf_count = data_tuple[0]
+	warning = data_tuple[8].rstrip('\x00')
+	
+	return (db_tstamp,plant_id,insects_present,db_imgfile,ir_val,healthy_leaf_count,unhealthy_leaf_count,color_healthy_mean,color_unhealthy_mean,ir_leaf_count,warning)
+
+	
+###########################################33	
 #Sets up Serial Connection
 def connect_to_camera():
 	for i in range(0,10):
 		portname = '/dev/ttyACM%i' % i
 		try:
-			port=Serial(port=portname)
+			port=Serial(port=portname,timeout=10)
 			port.inWaiting()
 			test_port()
 			port.flushInput()
 			return port
 		except:
 			continue
-	
+
+
+sd = check_for_sd()	
+web = dbConnect.check_for_internet()			
 port=connect_to_camera()
 	
+	
+##########################################
+#####GUI STUFF
+##########################################
+
+# from Tkinter import *
+# from PIL import Image,ImageTk
+
+# root = Tk()
+# root.wm_title('Autonomous Farm Robot')
+# root.config(background= '#FFFFFF')
+
+# root.geometry('{}x{}'.format(460, 350))
+
+# topframe = Frame(root,width=400,height=200)
+# imgframe = Frame(root,width=400,height=200)
+
+# root.grid_rowconfigure(1,weight=1)
+# root.grid_columnconfigure(0,weight=1)
+
+# topframe.grid(row=0,sticky='ns')
+# imgframe.grid(row=1,sticky='ns')
+
+# def calib_button():
+	# calibrate_camera()
+	
+# def measurement_btn(piclabel,plant_id):
+	# (data,newimg) = collect_data(plant_id)
+	# try:
+		# imgfilename = '/media/images/' + newimg
+		# img = Image.open(imgfilename)
+	# except:
+		# imgfilename = '/media/3472-745B/' + newimg
+		# img = Image.open(imgfilename)
+
+	# photo = ImageTk.PhotoImage(img)
+	# piclabel.configure(image=photo)
+	# piclabel.image = photo
+		
+
+# calibrate_button = Button(topframe,text='Calibrate Camera',command = calib_button)
+# calibrate_button.grid(row=0,column=0,columnspan=4)
+
+# Button(topframe,text='0',width=8,command=lambda: measurement_btn(piclabel,0)).grid(row=1,column=0)
+# Button(topframe,text='1',width=8,command=lambda: measurement_btn(piclabel,1)).grid(row=1,column=1)
+# Button(topframe,text='2',width=8,command=lambda: measurement_btn(piclabel,2)).grid(row=1,column=2)
+# Button(topframe,text='3',width=8,command=lambda: measurement_btn(piclabel,3)).grid(row=1,column=3)
+# Button(topframe,text='4',width=8,command=lambda: measurement_btn(piclabel,4)).grid(row=2,column=0)
+# Button(topframe,text='5',width=8,command=lambda: measurement_btn(piclabel,5)).grid(row=2,column=1)
+# Button(topframe,text='6',width=8,command=lambda: measurement_btn(piclabel,6)).grid(row=2,column=2)
+# Button(topframe,text='7',width=8,command=lambda: measurement_btn(piclabel,7)).grid(row=2,column=3)
+# Button(topframe,text='8',width=8,command=lambda: measurement_btn(piclabel,8)).grid(row=3,column=0)
+# Button(topframe,text='9',width=8,command=lambda: measurement_btn(piclabel,9)).grid(row=3,column=1)
+# Button(topframe,text='10',width=8,command=lambda: measurement_btn(piclabel,10)).grid(row=3,column=2)
+# Button(topframe,text='11',width=8,command=lambda: measurement_btn(piclabel,11)).grid(row=3,column=3)
+# Button(topframe,text='12',width=8,command=lambda: measurement_btn(piclabel,12)).grid(row=4,column=0)
+# Button(topframe,text='13',width=8,command=lambda: measurement_btn(piclabel,13)).grid(row=4,column=1)
+# Button(topframe,text='14',width=8,command=lambda: measurement_btn(piclabel,14)).grid(row=4,column=2)
+# Button(topframe,text='15',width=8,command=lambda: measurement_btn(piclabel,15)).grid(row=4,column=3)
+
+
+# img = Image.open('/media/images/plant_0_0404_17-13-27.jpg')
+# photo = ImageTk.PhotoImage(img)
+# piclabel = Label(imgframe,image = photo)
+# piclabel.image = photo
+# piclabel.grid(row=0,column=0)
+
+# root.mainloop()
 
 	
-
-
-
-			
-		
 		
 
 
