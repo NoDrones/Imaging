@@ -5,6 +5,15 @@ i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
 i2c_obj.deinit() # Fully reset I2C device...
 i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
 
+def reinitialize():
+	try:
+		i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
+		i2c_obj.deinit() # Fully reset I2C device...
+		i2c_obj = pyb.I2C(2, pyb.I2C.MASTER)
+		return 1
+	except:
+		return -1
+
 def send_packed_msg(packed_msg):
 
 	packed_next_msg_size = ustruct.pack("<i", len(packed_msg))

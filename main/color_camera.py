@@ -49,6 +49,13 @@ if __name__ == "__main__":
 	calibrated = False
 	metadata_str = ""
 
+
+	# green is -a, yellow is +b, blue is -b, red is +a
+	healthy_leaf_thresholds = [(26, 100, -40, -10, 20, 40), (20, 26, -40, -10, 20, 40), (14, 20, -40, -10, 10, 40), (8, 14, -40, -2, 2, 40)]
+	bad_thresholds = [(0, 5, -2, 40, -10, 3), (5, 10, -2, 30, -10, 3), (10, 15, -2, 30, -10, 2)]
+	unhealthy_leaf_thresholds = [(19, 100, -3, 40, 0, 40)]
+	beetle_thresholds = [(19, 100, -3, 40, 0, 40)]
+
 	while(1): #Begin the loop that listens for Beaglebone commands
 
 		command_received = usb_comms.listen_for_trigger()
@@ -70,11 +77,14 @@ if __name__ == "__main__":
 			sensor.set_auto_gain(False)
 			sensor.set_auto_whitebal(False)
 			sensor.set_auto_exposure(False)
+
 			while toggle_flash() != 1: pass # turn flash on for calibration
-			if color_gain.set_custom_exposure() != -1:
+			return_code = color_gain.set_custom_exposure()
+			if return_code != -1:
 				calibrated = True # Now set the exposure
 			else:
-				usb_comms.send_msg('@17s',(b'Calibration Error',))
+				usb_comms.send_msg('@50s',(str(return_code),))
+				while toggle_flash() != 0: pass # turn flash off after calibration
 				continue
 
 			while toggle_flash() != 0: pass # turn flash off after calibration
@@ -85,9 +95,24 @@ if __name__ == "__main__":
 				metadata_str = metadata_str + str(morsel) + ","
 			metadata_str = metadata_str + warning + "\n" #(gain,r_gain,g_gain,b_gain,exposure_value,calibration_warning,"\n")
 
+			new_metadata_list = []
+
 			# Append thresholds to metadata_str - only necessary in color camera since thresholds change
-			new_metadata_tuple = (healthy_leaf_thresholds[0], healthy_leaf_thresholds[1], healthy_leaf_thresholds[2], healthy_leaf_thresholds[3], healthy_leaf_thresholds[4], healthy_leaf_thresholds[5], unhealthy_leaf_thresholds[0], unhealthy_leaf_thresholds[1], unhealthy_leaf_thresholds[2], unhealthy_leaf_thresholds[3], unhealthy_leaf_thresholds[4], unhealthy_leaf_thresholds[5], beetle_thresholds[0], beetle_thresholds[1], beetle_thresholds[2], beetle_thresholds[3], beetle_thresholds[4], beetle_thresholds[5], bad_thresholds[0], bad_thresholds[1], bad_thresholds[2], bad_thresholds[3], bad_thresholds[4], bad_thresholds[5])
-			for morsel in new_metadata_tuple:
+			for i in range(len(healthy_leaf_thresholds)):
+				for j in range(6):
+					new_metadata_list.append(healthy_leaf_thresholds[i][j])
+			for i in range(len(unhealthy_leaf_thresholds)):
+				for j in range(6):
+					new_metadata_list.append(unhealthy_leaf_thresholds[i][j])
+			for i in range(len(bad_thresholds)):
+				for j in range(6):
+					new_metadata_list.append(bad_thresholds[i][j])
+			for i in range(len(beetle_thresholds)):
+				for j in range(6):
+					new_metadata_list.append(beetle_thresholds[i][j])
+			
+			
+			for morsel in new_metadata_list:
 				metadata_str = metadata_str + str(morsel) + ","
 			metadata_str = metadata_str[:-1] + "\n" #(leaf_thresholds_l_lo,leaf_thresholds_l_hi,leaf_thresholds_a_lo,leaf_thresholds_a_hi,leaf_thresholds_b_lo,leaf_thresholds_b_hi,bad_threshold_l_lo,bad_threshold_l_hi,bad_threshold_a_lo,bad_threshold_a_hi,bad_threshold_b_lo,bad_threshold_b_hi)
 			calibrated = True
@@ -100,23 +125,28 @@ if __name__ == "__main__":
 
 		elif "trigger" in command:
 
+			
 			# collect plant_id and image number from Beaglebone
 			try:
 				plant_id = usb_comms.recv_msg()[0]
 			except:
-				usb_comms.send_msg('@17s',(b'Plant ID Error',))
+				#usb_comms.send_msg('@17s',(b'Plant ID Error',))
 				continue
 
+
+			
 			if not i2c_master.send_command(command_type = "trigger"):
-				usb_comms.send_msg('@17s',(b'Trigger Error',))
+				#usb_comms.send_msg('@17s',(b'Trigger Error',))
 				continue
 
 			if not send_plant_id(plant_id): # try to send plant_id to ir_camera
-				usb_comms.send_msg('@17s',(b'Plant ID Error',))
+				#usb_comms.send_msg('@17s',(b'Plant ID Error',))
 				continue
 
+			''' ADD THESE SAFEGUARDS BACK IN LATER WITH AN ALL GOOD MESSAGE SENT IF NONE OF THE BELOW MESSAGES ARE SENT!
 			if calibrated == False:
 				usb_comms.send_msg('@20s',(b'Not Calibrated',))
+			'''
 
 			# \/ Take Photo \/
 
@@ -144,14 +174,14 @@ if __name__ == "__main__":
 
 			#send the jpeg to Beaglebone, exit if send fails
 			while not usb_comms.send_img(img):
-				usb_comms.send_msg('@20s',(b'Image Not Sent',))
+				usb_comms.send_msg('@14s',(b'Image Not Sent',))
 				continue
-			
+
 			# reload raw
 			raw_read = image.ImageReader(raw_str)
 			img = raw_read.next_frame(copy_to_fb = True, loop = False)
 			raw_read.close()
-			
+
 			# save metadata file
 			img_metadata_path = "metadata_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
 			img_metadata_fd = open(img_metadata_path, "w+")
@@ -161,12 +191,15 @@ if __name__ == "__main__":
 			# receive ir_data before continuing
 			try:
 				(msg_type, next_msg_format_str) = i2c_master.receive_msg()
+				usb_comms.send_msg('@16s',(b'IR Data Received',))
 			except:
-				usb_comms.send_msg('@20s',(b'I2C Error',))
+				if not i2c_master.reinitialize():
+					usb_comms.send_msg('@9s',(b'I2C Error',))
+				usb_comms.send_msg('@17s',(b'I2C Reinitialized',))
 				continue
 
 			if "data" not in msg_type:
-				usb_comms.send_msg('@20s',(b'Error Receiving IR Data',))
+				usb_comms.send_msg('@23s',(b'Error Receiving IR Data',))
 				continue
 			else:
 				ir_data_tuple = i2c_master.listen_for_msg(format_str = next_msg_format_str) # calibration tuple structure: overall_gain, r_gain, b_gain, g_gain, exposure, warning_bytes
@@ -176,10 +209,12 @@ if __name__ == "__main__":
 				if 'none' not in ir_data_list[-1]:
 					warning = "ir data warning: " + ir_data_list[-1]
 
+			healthy_a_mean = 0
+			unhealthy_a_mean = 0
 			healthy_leaves_a_mean_sum = 0
+			unhealthy_leaves_a_mean_sum = 0
 			healthy_leaf_a_mean = 0
 			unhealthy_leaf_a_mean = 0
-			unhealthy_leaves_a_mean_sum = 0
 			healthy_blob_found = False
 			unhealthy_blob_found = False
 
@@ -188,13 +223,9 @@ if __name__ == "__main__":
 			healthy_leaf_bad_blobs = []
 			unhealthy_leaf_blobs = []
 			unhealthy_leaf_bad_blobs = []
-			healthy_leaf_count, unhealthy_leaf_count = 0, 0
+			healthy_leaf_count = 0 
+			unhealthy_leaf_count = 0 
 
-			# green is -a, yellow is +b, blue is -b, red is +a
-			healthy_leaf_thresholds = [(26, 100, -40, -10, 20, 40), (20, 26, -40, -10, 20, 40), (14, 20, -40, -10, 10, 40), (8, 14, -40, -2, 2, 40)]
-			bad_thresholds = [(0, 5, -2, 40, -10, 3), (5, 10, -2, 30, -10, 3), (10, 15, -2, 30, -10, 2)]
-			unhealthy_leaf_thresholds = [(19, 100, -3, 40, 0, 40)]
-			beetle_thresholds = [(19, 100, -3, 40, 0, 40)]
 
 			#######################
 			# UNHEALTHY LEAVES
@@ -241,7 +272,7 @@ if __name__ == "__main__":
 						pass
 						#okay fine, the error is something else.
 
-			beetle_count = len(beetles)		
+			beetle_count = len(beetles)
 
 			#######################
 			# HEALTHY LEAVES
@@ -270,10 +301,20 @@ if __name__ == "__main__":
 				healthy_leaves_a_mean_sum = healthy_leaves_a_mean_sum + healthy_leaf_a_mean
 
 
-			''' UNCOMMENT THIS IF YOU WANT THE BB TO RECEIVE A PIC WITH BOUNDING BOXES. 
+			if healthy_blob_found:
+				healthy_leaf_count = healthy_leaf_blob_index + 1
+				healthy_a_mean = healthy_leaves_a_mean_sum / (healthy_leaf_count)
+
+			if unhealthy_blob_found:
+				unhealthy_leaf_count = unhealthy_leaf_blob_index + 1
+				unhealthy_a_mean = unhealthy_leaves_a_mean_sum / unhealthy_leaf_count
+
+
+
+			''' UNCOMMENT THIS IF YOU WANT THE BB TO RECEIVE A PIC WITH BOUNDING BOXES.
 			for i in beetles:
 				img.draw_rectangle(i.rect(), color = (0, 255, 255))
-			
+
 			for i in unhealthy_leaf_blobs:
 				img.draw_rectangle(i.rect(), color = (100, 100, 100))
 
@@ -313,7 +354,7 @@ if __name__ == "__main__":
 			data_tuple_to_send = tuple(data_list_to_send)
 
 			# Send data to beaglebone
-			usb_comms.send_msg('@2i3f50s2i2fi50s', data_tuple_to_send)
+			usb_comms.send_msg('@if50s2i2fi50s', data_tuple_to_send)
 
 
 

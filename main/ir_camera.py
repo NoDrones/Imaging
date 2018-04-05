@@ -2,7 +2,7 @@ import sensor, image, time, utime, pyb, ustruct, os, ir_gain, i2c_slave, gc
 
 def send_data(leaf_count = 0, leaf_mean = 0, warning_str = "none"):
 
-	format_str = "<1i1f50s"
+	format_str = "<if50s"
 	success = i2c_slave.send_next_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
 	if success == False:
 		return -1
@@ -45,11 +45,13 @@ if __name__ == "__main__":
 	if len(img_number_str) == 0: img_number_str = "0" # If no number is read, start at 0
 	last_photo_id_fd.close() # Close file
 
-	healthy_leaf_thresholds, unhealthy_leaf_thresholds, bad_thresholds = (170, 255), (80, 120), (0, 50)
 	flash_time_ms = 250 # Set flash_time to be greater than exposure time
 	warning = "none"
 	calibrated = False
 	metadata_str = ""
+
+	leaf_thresholds = [(45, 50), (50, 55), (55, 60), (60, 65), (70, 75), (80, 85), (85, 90), (90, 95), (95, 100), (100, 105), (105, 110), (110, 115), (115, 120), (120, 255)]
+	bad_thresholds = [(0, 15), (15, 25), (25, 35), (35, 45)]
 
 	while(1): #Begin the loop that listens for Beaglebone commands
 		# since we are expecting a command, we don't need to worry about the second value in tuple (next_msg_format_str)
@@ -76,11 +78,20 @@ if __name__ == "__main__":
 				metadata_str = metadata_str + str(morsel) + ","
 			metadata_str = metadata_str + warning + "\n" #(gain,r_gain,g_gain,b_gain,exposure_value,calibration_warning,"\n")
 
+			new_metadata_list = []
+
+			# Append thresholds to metadata_str - only necessary in color camera since thresholds change
+			for i in range(len(leaf_thresholds)):
+				for j in range(2):
+					new_metadata_list.append(leaf_thresholds[i][j])
+			for i in range(len(bad_thresholds)):
+				for j in range(2):
+					new_metadata_list.append(bad_thresholds[i][j])
+			
 			# Append thresholds to metadata_str
-			new_metadata_tuple = (healthy_leaf_thresholds[0], healthy_leaf_thresholds[1], unhealthy_leaf_thresholds[0], unhealthy_leaf_thresholds[1], bad_thresholds[0], bad_thresholds[1])
-			for morsel in new_metadata_tuple:
+			for morsel in new_metadata_list:
 				metadata_str = metadata_str + str(morsel) + ","
-			metadata_str = metadata_str[:-1] + "\n" #(healthy_leaf_thresholds_lo,healthy_leaf_thresholds_hi,unhealthy_leaf_thresholds_lo,unhealthy_leaf_thresholds_hi,bad_thresholds_lo,bad_thresholds_hi,"\n")
+			metadata_str = metadata_str[:-1] + "\n"
 			calibrated = True
 
 		elif "trigger" in command:
@@ -129,8 +140,7 @@ if __name__ == "__main__":
 			leaf_blobs = []
 			bad_blobs = []
 
-			leaf_thresholds = [(45, 50), (50, 55), (55, 60), (60, 65), (70, 75), (80, 85), (85, 90), (90, 95), (95, 100), (100, 105), (105, 110), (110, 115), (115, 120), (120, 255)]
-			bad_thresholds = [(0, 15), (15, 25), (25, 35), (35, 45)]
+
 
 			##################
 			# FIND LEAVES
@@ -157,7 +167,10 @@ if __name__ == "__main__":
 				leaf_mean = leaves_mean_sum / leaf_count
 
 			# Send and save data
-			send_data(leaf_count = leaf_count, leaf_mean = leaf_mean, warning_str = warning)
+			if not send_data(leaf_count = leaf_count, leaf_mean = leaf_mean, warning_str = warning):
+				i2c_slave.reinitialize()
+				warning = "data send error"
+				
 			new_data_tuple = (leaf_count, leaf_mean)
 			for morsel in new_data_tuple:
 				data_str = data_str + str(morsel) + ","

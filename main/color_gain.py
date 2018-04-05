@@ -43,7 +43,7 @@ def set_gain(gain_db):
 	sensor.__write_reg(0x00, gain_reg_val)
 	return gain_reg_val
 
-def set_custom_exposure(high_l_mean_thresh = 21, low_l_mean_thresh = 22):
+def set_custom_exposure(high_l_mean_thresh = 22, low_l_mean_thresh = 21):
 	try:
 		sensor.set_auto_whitebal(True)
 		utime.sleep_ms(250)
@@ -66,12 +66,12 @@ def set_custom_exposure(high_l_mean_thresh = 21, low_l_mean_thresh = 22):
 
 		cur_gain = get_gain()[0]
 
-		while(((l_mean > high_l_mean_thresh) | (l_mean < low_l_mean_thresh))) & (count <= 256) & ((cur_gain >= 1.1) | (cur_gain <= 31.9)):
+		while(((l_mean > high_l_mean_thresh) | (l_mean < low_l_mean_thresh)) & (count <= 256) & ((cur_gain >= 1.1) | (cur_gain <= 31.9))):
 
 			img = sensor.snapshot()
 			img_stats = img.get_statistics()
-			l_mean = img_stats.l_mean(
-)
+			l_mean = img_stats.l_mean()
+
 			if l_mean > high_l_mean_thresh:
 				new_gain = cur_gain - .1
 			elif l_mean < low_l_mean_thresh:
@@ -83,7 +83,7 @@ def set_custom_exposure(high_l_mean_thresh = 21, low_l_mean_thresh = 22):
 			cur_gain = new_gain
 			count += 1
 
-		if (count < 256) & (mean <= high_mean_thresh) & (mean >= low_l_mean_thresh): #if count is 256 then calibration was not succesfully completed
+		if ((count < 256) & (l_mean <= high_l_mean_thresh) & (l_mean >= low_l_mean_thresh)): #if count is = 256 then calibration was not succesfully completed
 			return l_mean
 		else:
 			return -1

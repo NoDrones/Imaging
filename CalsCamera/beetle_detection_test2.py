@@ -59,7 +59,7 @@ sensor.set_auto_exposure(False)
 
 while toggle_flash() != 1: pass # turn flash on for calibration
 
-if color_gain.set_custom_exposure(high_l_mean_thresh = 22, low_l_mean_thresh = 21) != -1: calibrated = True # Now set the exposure
+if color_gain.set_custom_exposure() != -1: calibrated = True # Now set the exposure
 else: pass #print("Could not complete calibration")
 
 while toggle_flash() != 0: pass # turn flash off after calibration
@@ -87,7 +87,7 @@ sensor.set_auto_exposure(False)
 sensor.__write_reg(0x02, 16)
 sensor.__write_reg(0x03, 22)
 sensor.__write_reg(0x01, 64)
-sensor.__write_reg(0x00, 6)
+sensor.__write_reg(0x00, 7)
 sensor.__write_reg(0x08, 1)
 sensor.__write_reg(0x10, 18)
 '''
