@@ -205,7 +205,7 @@ if __name__ == "__main__":
 				# check warning bytes
 				ir_data_list[-1] = ir_data_list[-1].decode('ascii').rstrip('\x00')
 				if 'none' not in ir_data_list[-1]:
-					warning = "ir data warning: " + ir_data_list[-1]
+					warning = "ir data warning: " + ir_data_list[-1] #######GETTING AN ERROR HERE 
 
 			healthy_a_mean = 0
 			unhealthy_a_mean = 0
@@ -215,6 +215,8 @@ if __name__ == "__main__":
 			unhealthy_leaf_a_mean = 0
 			healthy_blob_found = False
 			unhealthy_blob_found = False
+			total_healthy_leaf_area = 0
+			total_unhealthy_leaf_area = 0
 
 			beetles = []
 			healthy_leaf_blobs = []
@@ -250,6 +252,7 @@ if __name__ == "__main__":
 				unhealthy_leaf_rect_a_mean = leaf_rect_stats.a_mean() #for comparison!
 				unhealthy_leaf_a_mean = unhealthy_leaf_rect_pix_a_sum / unhealthy_leaf_area #this is the valid measurement
 				unhealthy_leaves_a_mean_sum = unhealthy_leaves_a_mean_sum + unhealthy_leaf_a_mean
+				total_unhealthy_leaf_area = total_unhealthy_leaf_area + unhealthy_leaf_area
 
 				#####################
 				# FIND BEETLES
@@ -297,7 +300,7 @@ if __name__ == "__main__":
 				healthy_leaf_rect_a_mean = leaf_rect_stats.a_mean() #for comparison!
 				healthy_leaf_a_mean = healthy_leaf_rect_pix_a_sum / healthy_leaf_area #this is the valid measurement
 				healthy_leaves_a_mean_sum = healthy_leaves_a_mean_sum + healthy_leaf_a_mean
-
+				total_healthy_leaf_area = total_healthy_leaf_area + healthy_leaf_area 
 
 			if healthy_blob_found:
 				healthy_leaf_count = healthy_leaf_blob_index + 1
@@ -329,10 +332,10 @@ if __name__ == "__main__":
 
 			# Send and save data
 			data_str = ""
-			new_data_tuple = (healthy_leaf_count, unhealthy_leaf_count, healthy_a_mean, unhealthy_a_mean, beetle_count) #return data to bb
+			new_data_tuple = (healthy_leaf_count, unhealthy_leaf_count, healthy_a_mean, unhealthy_a_mean, beetle_count, total_healthy_leaf_area, total_unhealthy_leaf_area) #return data to bb
 			for morsel in new_data_tuple:
 				data_str = data_str + str(morsel) + ","
-			data_str = data_str + warning + "\n" #(a_mean, leaf_count, warning"\n")
+			data_str = data_str + warning + "\n"
 
 			img_data_path = "data_" + str(next_img_number) + "_plant_" + str(plant_id) + ".txt" # prepare to create metadata file for picture
 			img_data_fd = open(img_data_path, "w+")
@@ -345,7 +348,7 @@ if __name__ == "__main__":
 			data_tuple_to_send = tuple(data_list_to_send)
 
 			# Send data to beaglebone
-			usb_comms.send_msg('@if50s2i2fi50s', data_tuple_to_send)
+			usb_comms.send_msg('@ifi50s2i2fi2i50s', data_tuple_to_send)
 
 
 

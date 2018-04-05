@@ -1,8 +1,8 @@
 import sensor, image, time, utime, pyb, ustruct, os, ir_gain, i2c_slave, gc
 
-def send_data(leaf_count = 0, leaf_mean = 0, warning_str = "none"):
+def send_data(leaf_count = 0, leaf_mean = 0, total_leaf_area = 0, warning_str = "none"):
 
-	format_str = "<if50s"
+	format_str = "<ifi50s"
 	success = i2c_slave.send_next_msg_format(next_msg_type_str = "data", next_msg_format_str = format_str)
 	if success == False:
 		return -1
@@ -133,6 +133,7 @@ if __name__ == "__main__":
 
 			leaf_count = 0
 			leaf_area = 0
+			total_leaf_area = 0
 			leaf_mean = 0
 			leaves_mean_sum = 0
 			blob_found = False
@@ -161,13 +162,14 @@ if __name__ == "__main__":
 					leaf_area = leaf_area - (bad_blob[2] * bad_blob[3]) # tracking the remaining area of the leaf as the bad_rects are removed
 
 				leaves_mean_sum = leaves_mean_sum + leaf_rect_pix_sum / leaf_area # the below function does not take into account the size of a leaf... each leaf is weighted equally
+				total_leaf_area = total_leaf_area + leaf_area
 
 			if blob_found:
 				leaf_count = (leaf_blob_index + 1)
 				leaf_mean = leaves_mean_sum / leaf_count
 
 			# Send and save data
-			if send_data(leaf_count = leaf_count, leaf_mean = leaf_mean, warning_str = warning) == -1:
+			if send_data(leaf_count = leaf_count, leaf_mean = leaf_mean, total_leaf_area = total_leaf_area, warning_str = warning) == -1:
 				i2c_slave.reinitialize()
 				warning = "data send error"
 
@@ -181,7 +183,7 @@ if __name__ == "__main__":
 			if img_data_fd.write(data_str) < 1: warning = "insufficient data bytes written" # Write metadata to text file
 			img_data_fd.close() # Close file
 
-			print("leaf count = %i; leaf mean = %i" % (leaf_count, leaf_mean))
+			print("leaf count = %i; leaf mean = %i; total leaf area = %i" % (leaf_count, leaf_mean, total_leaf_area))
 
 			sensor.flush()
 
