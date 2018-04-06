@@ -58,6 +58,8 @@ if __name__ == "__main__":
 
 	while(1): #Begin the loop that listens for Beaglebone commands
 
+		warning = "none"
+
 		command_received = usb_comms.listen_for_trigger()
 		if "int" in str(type(command_received)):
 			command = "timeout"

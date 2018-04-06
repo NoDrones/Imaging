@@ -8,7 +8,7 @@ def send_data(leaf_count = 0, leaf_mean = 0, total_leaf_area = 0, warning_str = 
 		return -1
 
 	warning_bytes = warning_str.encode('ascii')
-	packed_data = ustruct.pack(format_str, leaf_count, leaf_mean, warning_bytes)
+	packed_data = ustruct.pack(format_str, leaf_count, leaf_mean, total_leaf_area, warning_bytes)
 
 	return i2c_slave.send_packed_msg(packed_msg = packed_data)
 
@@ -55,6 +55,8 @@ if __name__ == "__main__":
 
 	while(1): #Begin the loop that listens for Beaglebone commands
 		# since we are expecting a command, we don't need to worry about the second value in tuple (next_msg_format_str)
+		warning = "none"
+
 		command_tuple = i2c_slave.receive_msg()
 		if "int" in str(type(command_tuple)):
 			command = "none"
@@ -87,7 +89,7 @@ if __name__ == "__main__":
 			for i in range(len(bad_thresholds)):
 				for j in range(2):
 					new_metadata_list.append(bad_thresholds[i][j])
-			
+
 			# Append thresholds to metadata_str
 			for morsel in new_metadata_list:
 				metadata_str = metadata_str + str(morsel) + ","
@@ -173,7 +175,7 @@ if __name__ == "__main__":
 				i2c_slave.reinitialize()
 				warning = "data send error"
 
-			new_data_tuple = (leaf_count, leaf_mean)
+			new_data_tuple = (leaf_count, leaf_mean, total_leaf_area)
 			for morsel in new_data_tuple:
 				data_str = data_str + str(morsel) + ","
 			data_str = data_str + warning + "\n" #(leaf_count, leaf_mean, warning"\n")
@@ -183,7 +185,7 @@ if __name__ == "__main__":
 			if img_data_fd.write(data_str) < 1: warning = "insufficient data bytes written" # Write metadata to text file
 			img_data_fd.close() # Close file
 
-			print("leaf count = %i; leaf mean = %i; total leaf area = %i" % (leaf_count, leaf_mean, total_leaf_area))
+			print("leaf count = %i; leaf mean = %f; total leaf area = %i" % (leaf_count, leaf_mean, total_leaf_area))
 
 			sensor.flush()
 
