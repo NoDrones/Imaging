@@ -1,5 +1,5 @@
-#!usr/bin/env python
-
+import Adafruit_BBIO.PWM as PWM
+import Adafruit_BBIO.GPIO as GPIO
 import struct,time,requests,dbConnect
 from serial import Serial
 
@@ -83,6 +83,8 @@ def recv_msg():
 ## Camera sends jpg bytes to Beaglebone
 def recv_img():
 	sz = struct.unpack('@i',port.read(4))[0]
+	if sz==4:
+		return -1
 	print 'Reading %i bytes: ' % sz
 	raw_img = port.read(sz)
 	return raw_img
@@ -147,6 +149,11 @@ def collect_data(plant_id):
 	
 	if success==1:
 		raw_img = recv_img()
+		if raw_img==-1:
+			print 'Image receipt failed: trying again'
+			time.sleep(5)
+			raw_img = recv_img()
+			
 		if 'IR Data Received' in recv_msg():
 			data = recv_msg()
 			t = time.time()
@@ -215,63 +222,53 @@ port=connect_to_camera()
 ###### MOTOR CONTROL
 #######################################################
 
+###*****************************************************
+pwmChannel1 = "P9_14" # Clockwise
+pwmChannel2 = "P8_13" # Counterclockwise
+optoChannel = "P9_15"
+
+revsPerPlant = 13
+totalPlants = 3
 #*****************************************************
-# pwmChannel1 = "P9_14" # Clockwise
-# pwmChannel2 = "P8_13" # Counterclockwise
-# optoChannel = "P9_15"
+calibrate_camera()
+collect_data(0)
+currentRevs = 0
+currentPlant = 0
 
-# revsPerPlant = 13
-# totalPlants = 6
-# #*****************************************************
+GPIO.setup(optoChannel, GPIO.IN)
 
-# currentRevs = 0
-# currentPlant = 0
-
-# GPIO.setup(optoChannel, GPIO.IN)
-
-# PWM.start(pwmChannel1, 0, 10000)
-# print ("here")
-# while currentPlant < totalPlants:
-    # print ("plant: " + str(currentPlant))
-    # PWM.set_duty_cycle(pwmChannel1, 10)
-    # while currentRevs < revsPerPlant:
-        # print (currentRevs)
-        # GPIO.wait_for_edge(optoChannel, GPIO.FALLING)
-        # currentRevs += 1
-    # PWM.set_duty_cycle(pwmChannel1, 0)
-    # currentPlant += 1
-    # currentRevs = 0
-    # time.sleep(5)
+PWM.start(pwmChannel1, 0, 10000)
+print ("here")
+while currentPlant < totalPlants:
+	print ("plant: " + str(currentPlant))
+	PWM.set_duty_cycle(pwmChannel1, 20)
+	while currentRevs < revsPerPlant:
+		print (currentRevs)
+		GPIO.wait_for_edge(optoChannel, GPIO.FALLING)
+		currentRevs += 1
+	PWM.set_duty_cycle(pwmChannel1, 0)
+	currentPlant += 1
+	currentRevs = 0
+	time.sleep(5)
+	(data,img) = collect_data(currentPlant)
 	
-	# if currentPlant==1:
-		# calibrate_camera()
-	# else:
-		# while(1):
-			# try:
-				# (data,img) = collect_data(currentPlant)
-				# print data
-				# break
-			# except:
-				# time.sleep(4)
-				# continue
-		
-    # #*****************************************************
-    # # send trigger to start taking pics
-    # # some sort of trigger to move on - this trigger needs to come from knowing we are done with pics
-    # #*****************************************************
+	#*****************************************************
+	# send trigger to start taking pics
+	# some sort of trigger to move on - this trigger needs to come from knowing we are done with pics
+	#*****************************************************
 	
-# PWM.stop(pwmChannel1)
-# PWM.cleanup()
-# time.sleep(10)
-# currentRevs = 0
-# PWM.start(pwmChannel2, 0, 10000)
-# PWM.set_duty_cycle(pwmChannel2, 10)
-# # print ("going back")
-# # while currentRevs < (totalPlants * revsPerPlant):
-    # # print (currentRevs)
-    # # GPIO.wait_for_edge(optoChannel, GPIO.FALLING)
-    # # currentRevs += 1
-# PWM.stop(pwmChannel2)
+PWM.stop(pwmChannel1)
+PWM.cleanup()
+time.sleep(10)
+currentRevs = 0
+PWM.start(pwmChannel2, 0, 10000)
+PWM.set_duty_cycle(pwmChannel2, 10)
+# print ("going back")
+# while currentRevs < (totalPlants * revsPerPlant):
+	# print (currentRevs)
+	# GPIO.wait_for_edge(optoChannel, GPIO.FALLING)
+	# currentRevs += 1
+PWM.stop(pwmChannel2)
 # PWM.cleanup()	
 
 
@@ -360,7 +357,7 @@ port=connect_to_camera()
 
 	
 
-                
+				
 
 
 

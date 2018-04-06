@@ -81,10 +81,13 @@ def add_measurement(values):
 	#Values tuple should look like below:
 	#(tstamp,location_no,insects_present,image,ir_val,healthy_leaf_count,unhealthy_leaf_count,color_healthy_mean,color_unhealthy_mean,ir_leaf_count,warning)
 	
-	statement = """INSERT INTO `measurements` (tstamp, location_no,
-		insects_present, image,ir_val,healthy_leaf_count,
+	statement = """INSERT INTO `measurements` (
+		tstamp, location_no,insects_present,
+		image,ir_val,healthy_leaf_count,
 		unhealthy_leaf_count,color_healthy_mean,color_unhealthy_mean,
-		ir_leaf_count,warning) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+		ir_leaf_count,total_leaf_area,healthy_leaf_area,
+		unhealthy_leaf_area,warning) 
+		VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 	cnx = connection
 	cur = cursor
 	while(1):
@@ -99,7 +102,7 @@ def add_measurement(values):
 			else:
 				return -1
 	return 1
-		
+	
 def update_locations(loc_no,image,tstamp):
 	statement = """UPDATE locations SET last_pic_saved = %s,ts_of_last_pic=%s WHERE location_no = %s"""
 	cnx = connection
