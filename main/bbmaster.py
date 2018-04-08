@@ -1,4 +1,3 @@
-#!usr/bin/env python
 
 import struct,time,requests,dbConnect
 from serial import Serial
@@ -174,7 +173,7 @@ def process_data(data_tuple,t,db_imgfile,plant_id):
 	ir_val = data_tuple[1]
 	healthy_leaf_count = data_tuple[4]
 	unhealthy_leaf_count = data_tuple[5]
-	color_healthy_mean = data_tuple[5]
+	color_healthy_mean = data_tuple[6]
 	color_unhealthy_mean = data_tuple[7]
 	ir_leaf_count = data_tuple[0]
 	ir_leaf_area = data_tuple[2]

@@ -210,12 +210,14 @@ def connect_to_camera():
 			return port
 		except:
 			continue
+	return -1
 
 
 sd = check_for_sd()	
 web = dbConnect.check_for_internet()			
 port=connect_to_camera()
-	
+if port ==-1:
+	dbConnect.shutdown()
 
 
 #######################################################
@@ -269,77 +271,11 @@ PWM.set_duty_cycle(pwmChannel2, 10)
 	# GPIO.wait_for_edge(optoChannel, GPIO.FALLING)
 	# currentRevs += 1
 PWM.stop(pwmChannel2)
-# PWM.cleanup()	
+PWM.cleanup()	
 
 
 
-##########################################
-#####GUI STUFF
-##########################################
 
-# from Tkinter import *
-# from PIL import Image,ImageTk
-
-# root = Tk()
-# root.wm_title('Autonomous Farm Robot')
-# root.config(background= '#FFFFFF')
-
-# root.geometry('{}x{}'.format(460, 350))
-
-# topframe = Frame(root,width=400,height=200)
-# imgframe = Frame(root,width=400,height=200)
-
-# root.grid_rowconfigure(1,weight=1)
-# root.grid_columnconfigure(0,weight=1)
-
-# topframe.grid(row=0,sticky='ns')
-# imgframe.grid(row=1,sticky='ns')
-
-# def calib_button():
-	# calibrate_camera()
-	
-# def measurement_btn(piclabel,plant_id):
-	# (data,newimg) = collect_data(plant_id)
-	# try:
-		# imgfilename = '/media/images/' + newimg
-		# img = Image.open(imgfilename)
-	# except:
-		# imgfilename = '/media/3472-745B/' + newimg
-		# img = Image.open(imgfilename)
-
-	# photo = ImageTk.PhotoImage(img)
-	# piclabel.configure(image=photo)
-	# piclabel.image = photo
-		
-
-# calibrate_button = Button(topframe,text='Calibrate Camera',command = calib_button)
-# calibrate_button.grid(row=0,column=0,columnspan=4)
-
-# Button(topframe,text='0',width=8,command=lambda: measurement_btn(piclabel,0)).grid(row=1,column=0)
-# Button(topframe,text='1',width=8,command=lambda: measurement_btn(piclabel,1)).grid(row=1,column=1)
-# Button(topframe,text='2',width=8,command=lambda: measurement_btn(piclabel,2)).grid(row=1,column=2)
-# Button(topframe,text='3',width=8,command=lambda: measurement_btn(piclabel,3)).grid(row=1,column=3)
-# Button(topframe,text='4',width=8,command=lambda: measurement_btn(piclabel,4)).grid(row=2,column=0)
-# Button(topframe,text='5',width=8,command=lambda: measurement_btn(piclabel,5)).grid(row=2,column=1)
-# Button(topframe,text='6',width=8,command=lambda: measurement_btn(piclabel,6)).grid(row=2,column=2)
-# Button(topframe,text='7',width=8,command=lambda: measurement_btn(piclabel,7)).grid(row=2,column=3)
-# Button(topframe,text='8',width=8,command=lambda: measurement_btn(piclabel,8)).grid(row=3,column=0)
-# Button(topframe,text='9',width=8,command=lambda: measurement_btn(piclabel,9)).grid(row=3,column=1)
-# Button(topframe,text='10',width=8,command=lambda: measurement_btn(piclabel,10)).grid(row=3,column=2)
-# Button(topframe,text='11',width=8,command=lambda: measurement_btn(piclabel,11)).grid(row=3,column=3)
-# Button(topframe,text='12',width=8,command=lambda: measurement_btn(piclabel,12)).grid(row=4,column=0)
-# Button(topframe,text='13',width=8,command=lambda: measurement_btn(piclabel,13)).grid(row=4,column=1)
-# Button(topframe,text='14',width=8,command=lambda: measurement_btn(piclabel,14)).grid(row=4,column=2)
-# Button(topframe,text='15',width=8,command=lambda: measurement_btn(piclabel,15)).grid(row=4,column=3)
-
-
-# img = Image.open('/media/images/plant_0_0404_17-13-27.jpg')
-# photo = ImageTk.PhotoImage(img)
-# piclabel = Label(imgframe,image = photo)
-# piclabel.image = photo
-# piclabel.grid(row=0,column=0)
-
-# root.mainloop()
 
 	
 		

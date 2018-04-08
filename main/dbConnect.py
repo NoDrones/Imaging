@@ -97,6 +97,7 @@ def add_measurement(values):
 			break
 		except pymysql.err.OperationalError:
 			if check_for_internet()==1:
+				cnx.close()
 				(cnx,cur) = est_db_connection()
 				continue
 			else:
@@ -114,6 +115,7 @@ def update_locations(loc_no,image,tstamp):
 			break
 		except pymysql.err.OperationalError:
 			if check_for_internet()==1:
+				cnx.close()
 				(cnx,cur) = est_db_connection()
 				continue
 			else:
