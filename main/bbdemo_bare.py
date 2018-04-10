@@ -1,7 +1,12 @@
 import Adafruit_BBIO.PWM as PWM
 import Adafruit_BBIO.GPIO as GPIO
-import struct,time,requests,dbConnect
+import struct,time,requests
 from serial import Serial
+
+try:
+	import dbConnect
+except:
+	pass
 
 ###############################################
 ## Checks if the Beaglebone's SD card is recognized.
@@ -157,11 +162,11 @@ def collect_data(plant_id):
 		if 'IR Data Received' in recv_msg():
 			data = recv_msg()
 			t = time.time()
-			db_filename = save_img(raw_img,plant_id,t) #Add image to database & update plant_id's most recent img
-			db_tuple = process_data(data,t,db_filename,plant_id) #Process received data tuple
-			dbConnect.add_measurement(db_tuple) #Add measurements to database
-
-	return (data,db_filename)
+			#db_filename = save_img(raw_img,plant_id,t) #Add image to database & update plant_id's most recent img
+			#db_tuple = process_data(data,t,db_filename,plant_id) #Process received data tuple
+			#dbConnect.add_measurement(db_tuple) #Add measurements to database
+			
+	return (data,'')
 	
 #############################################################
 #Takes in the data returned from the camera
@@ -304,8 +309,6 @@ def mainloop(plant1,plant2,plant3):
 	backward(1) #Position over calib. square and stop
 	time.sleep(1)
 	
-	
-
 
 def motortest():
 	forward(1)

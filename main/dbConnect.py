@@ -95,7 +95,7 @@ def add_measurement(values):
 			cur.execute(statement, values)
 			cnx.commit()
 			break
-		except pymysql.err.OperationalError:
+		except:
 			if check_for_internet()==1:
 				cnx.close()
 				(cnx,cur) = est_db_connection()
@@ -121,6 +121,7 @@ def update_locations(loc_no,image,tstamp):
 			else:
 				return -1
 	return 1
+	
 	
 def add_img(db_filename,bb_filepath):
 	f = open(bb_filepath,'rb')
